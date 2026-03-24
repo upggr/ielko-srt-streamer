@@ -327,6 +327,15 @@
       white-space: nowrap;
     }
 
+    /* Sender column: URL + COPY / OBS / vMIX — must not clip controls */
+    .url-cell.url-cell--sender {
+      white-space: normal;
+      overflow: visible;
+      vertical-align: top;
+      word-break: break-all;
+      max-width: 320px;
+    }
+
     .actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
     /* --- MODAL --- */
@@ -753,6 +762,8 @@
   // Track previous bytesReceived per endpoint for bitrate calc
   const prevBytes = {};
   const prevTime = {};
+  /** Latest row snapshot by id — used for URLS modal (avoid broken onclick JSON in HTML) */
+  const endpointById = Object.create(null);
 
   // Auth check on load
   (async () => {
@@ -882,6 +893,8 @@
 
   function renderEndpoints(endpoints) {
     const wrap = document.getElementById('endpoints-wrap');
+    for (const k of Object.keys(endpointById)) delete endpointById[k];
+    endpoints.forEach(ep => { endpointById[ep.id] = ep; });
     if (!endpoints.length) {
       wrap.innerHTML = '<div id="empty-state">NO ENDPOINTS CONFIGURED. CREATE ONE TO BEGIN.</div>';
       return;
@@ -905,12 +918,12 @@
               <td><span class="status-badge ${ep.status === 'running' ? 'running' : 'stopped'}" data-epid="${ep.id}">${ep.status === 'running' ? '● RECEIVING' : 'OFFLINE'}</span></td>
               <td style="letter-spacing:1px;">${ep.name}</td>
               <td><span class="proto-tag">${ep.protocol.toUpperCase()}</span></td>
-              <td class="url-cell" title="${ep.senderUrl}">
+              <td class="url-cell url-cell--sender" title="${ep.senderUrl}">
                 ${ep.senderUrl}
                 <br><span style="display:inline-flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center;">
-                  <button type="button" class="copy-btn" onclick="copyText(${JSON.stringify(ep.senderUrl)})">COPY</button>
-                  ${ep.protocol === 'srt' ? `<button type="button" class="copy-btn" title="OBS Studio SRT" onclick="openEncoderHelp('obs', ${JSON.stringify(ep.senderUrl)})">OBS</button>
-                  <button type="button" class="copy-btn" title="vMix SRT" onclick="openEncoderHelp('vmix', ${JSON.stringify(ep.senderUrl)})">vMIX</button>` : ''}
+                  <button type="button" class="copy-btn" data-action="copy-text" data-payload="${encodeURIComponent(ep.senderUrl)}">COPY</button>
+                  ${ep.protocol === 'srt' ? `<button type="button" class="copy-btn" title="OBS Studio SRT" data-action="encoder-help" data-app="obs" data-payload="${encodeURIComponent(ep.senderUrl)}">OBS</button>
+                  <button type="button" class="copy-btn" title="vMix SRT" data-action="encoder-help" data-app="vmix" data-payload="${encodeURIComponent(ep.senderUrl)}">vMIX</button>` : ''}
                 </span>
               </td>
               <td class="url-cell">
@@ -922,7 +935,7 @@
               <td>
                 <div class="actions">
                   <button class="btn btn-sm" style="border-color:#2196F3;color:#2196F3;" onclick="copyTelegram('${esc(ep.name)}','${esc(ep.viewerUrl)}')">✈ TG</button>
-                  <button class="btn btn-sm" style="border-color:#aa44ff;color:#aa44ff;" onclick="showURLs(${JSON.stringify(ep).replace(/</g,'\\u003c')})">URLS</button>
+                  <button type="button" class="btn btn-sm" style="border-color:#aa44ff;color:#aa44ff;" data-action="show-urls" data-endpoint-id="${escapeHtml(ep.id)}">URLS</button>
                   <button class="btn btn-sm" style="border-color:#ffaa00;color:#ffaa00;" onclick="showDebug('${ep.id}','${esc(ep.name)}')">DEBUG</button>
                   <button class="btn btn-sm" style="border-color:#ff0000;color:#ff0000;" onclick="openYT('${ep.id}','${esc(ep.name)}','${ep.yt_status || 'off'}','${esc(ep.yt_stream_key || '')}')">YT</button>
                   <button class="btn btn-sm btn-danger" onclick="deleteEp('${ep.id}', '${ep.name}')">DEL</button>
@@ -999,8 +1012,8 @@
       rows += `<div class="info-row">
         <div class="info-label">ENCODER</div>
         <div class="info-value" style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button type="button" class="copy-btn" onclick="openEncoderHelp('obs', ${JSON.stringify(data.senderUrl)})">OBS — fields</button>
-          <button type="button" class="copy-btn" onclick="openEncoderHelp('vmix', ${JSON.stringify(data.senderUrl)})">vMIX — fields</button>
+          <button type="button" class="copy-btn" data-action="encoder-help" data-app="obs" data-payload="${encodeURIComponent(data.senderUrl)}">OBS — fields</button>
+          <button type="button" class="copy-btn" data-action="encoder-help" data-app="vmix" data-payload="${encodeURIComponent(data.senderUrl)}">vMIX — fields</button>
         </div>
       </div>`;
     }
@@ -1014,7 +1027,7 @@
   function infoRow(label, value, copyable = false) {
     const v = String(value);
     const copyBtn = copyable
-      ? `<button type="button" class="copy-btn" onclick="copyText(${JSON.stringify(v)})">COPY</button>`
+      ? `<button type="button" class="copy-btn" data-action="copy-text" data-payload="${encodeURIComponent(v)}">COPY</button>`
       : '';
     return `<div class="info-row">
       <div class="info-label">${escapeHtml(label)}</div>
@@ -1336,12 +1349,12 @@
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <div style="flex:1;font-size:10px;color:#aaa;word-break:break-all;">${u.isEmbed ? val : escHtml(val)}</div>
-          <button type="button" class="copy-btn" onclick="copyText(${JSON.stringify(u.value)})">COPY</button>
+          <button type="button" class="copy-btn" data-action="copy-text" data-payload="${encodeURIComponent(u.value)}">COPY</button>
         </div>
         ${u.label === 'SENDER URL' && ep.protocol === 'srt' ? `<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
           <span style="font-size:9px;color:var(--green-dim);letter-spacing:1px;margin-right:4px;">ENCODER HELP</span>
-          <button type="button" class="copy-btn" onclick="openEncoderHelp('obs', ${JSON.stringify(ep.senderUrl)})">OBS</button>
-          <button type="button" class="copy-btn" onclick="openEncoderHelp('vmix', ${JSON.stringify(ep.senderUrl)})">vMIX</button>
+          <button type="button" class="copy-btn" data-action="encoder-help" data-app="obs" data-payload="${encodeURIComponent(ep.senderUrl)}">OBS</button>
+          <button type="button" class="copy-btn" data-action="encoder-help" data-app="vmix" data-payload="${encodeURIComponent(ep.senderUrl)}">vMIX</button>
         </div>` : ''}
       </div>`;
     }).join('');
@@ -1360,6 +1373,35 @@
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 3000);
   }
+
+  // Delegated clicks: data-action avoids broken HTML from JSON in attributes (URLS / COPY / encoder help)
+  document.body.addEventListener('click', function uiActionDelegate(e) {
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    const action = el.getAttribute('data-action');
+    if (action === 'show-urls') {
+      e.preventDefault();
+      const id = el.getAttribute('data-endpoint-id');
+      if (id && endpointById[id]) showURLs(endpointById[id]);
+      return;
+    }
+    if (action === 'copy-text') {
+      e.preventDefault();
+      const pl = el.getAttribute('data-payload');
+      if (pl != null && pl !== '') copyText(decodeURIComponent(pl));
+      return;
+    }
+    if (action === 'encoder-help') {
+      e.preventDefault();
+      const app = el.getAttribute('data-app');
+      const pl = el.getAttribute('data-payload');
+      if (app && pl != null && pl !== '') openEncoderHelp(app, decodeURIComponent(pl));
+    }
+  });
+
+  window.showURLs = showURLs;
+  window.openEncoderHelp = openEncoderHelp;
+  window.copyText = copyText;
 </script>
 </body>
 </html>
