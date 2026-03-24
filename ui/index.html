@@ -705,6 +705,9 @@
   let hlsInstance = null;
   let authToken = localStorage.getItem('srt_token') || '';
   let refreshInterval = null;
+  // Track previous bytesReceived per endpoint for bitrate calc
+  const prevBytes = {};
+  const prevTime = {};
 
   // Auth check on load
   (async () => {
@@ -770,6 +773,43 @@
 
   async function refreshAll() {
     await Promise.all([refreshStats(), refreshEndpoints()]);
+    // After endpoints render, update live bitrate badges
+    updateBitrateBadges();
+  }
+
+  async function updateBitrateBadges() {
+    // Find all running endpoints currently shown
+    const badges = document.querySelectorAll('[data-epid]');
+    for (const badge of badges) {
+      const id = badge.dataset.epid;
+      try {
+        const r = await apiFetch(`/api/endpoints/${id}/stream-stats`);
+        if (!r.ok) continue;
+        const d = await r.json();
+        const now = Date.now();
+        let kbps = null;
+        if (d.live && d.bytesReceived != null) {
+          const prevB = prevBytes[id];
+          const prevT = prevTime[id];
+          if (prevB != null && prevT != null) {
+            const dt = (now - prevT) / 1000;
+            if (dt > 0) kbps = Math.round(((d.bytesReceived - prevB) * 8) / dt / 1000);
+          }
+          prevBytes[id] = d.bytesReceived;
+          prevTime[id] = now;
+        }
+        if (d.live) {
+          badge.innerHTML = kbps != null
+            ? `● LIVE &nbsp;<span style="font-size:9px;opacity:0.8;">${kbps} kbps</span>`
+            : '● LIVE';
+          badge.className = 'status-badge running';
+        } else {
+          // Stream not active — update status badge
+          badge.textContent = 'STOPPED';
+          badge.className = 'status-badge stopped';
+        }
+      } catch {}
+    }
   }
 
   async function refreshStats() {
@@ -819,7 +859,7 @@
         <tbody>
           ${endpoints.map(ep => `
             <tr>
-              <td><span class="status-badge ${ep.status}">${ep.status === 'running' ? '● LIVE' : ep.status.toUpperCase()}</span></td>
+              <td><span class="status-badge ${ep.status}" data-epid="${ep.status === 'running' ? ep.id : ''}">${ep.status === 'running' ? '● LIVE' : ep.status.toUpperCase()}</span></td>
               <td style="letter-spacing:1px;">${ep.name}</td>
               <td><span class="proto-tag">${ep.protocol.toUpperCase()}</span></td>
               <td style="color:#fff;">${ep.port}</td>

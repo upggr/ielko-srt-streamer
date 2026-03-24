@@ -3,7 +3,7 @@ const { Router } = require('express');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { addPath, removePath } = require('../services/mediamtxClient');
+const { addPath, removePath, getPathStatus } = require('../services/mediamtxClient');
 const { getLogs, startYouTube, stopYouTube } = require('../services/ffmpegManager');
 
 const router = Router();
@@ -108,6 +108,23 @@ router.delete('/:id', async (req, res) => {
   stopYouTube(ep.id);
   db.prepare('DELETE FROM endpoints WHERE id = ?').run(ep.id);
   res.json({ ok: true });
+});
+
+router.get('/:id/stream-stats', async (req, res) => {
+  const ep = db.prepare('SELECT name FROM endpoints WHERE id = ?').get(req.params.id);
+  if (!ep) { res.status(404).json({ error: 'Not found' }); return; }
+  try {
+    const result = await getPathStatus(ep.name);
+    if (result.status !== 200 || !result.body) { res.json({ live: false }); return; }
+    const path = result.body;
+    const ready = path.ready === true;
+    // Extract bytes/tracks from publisher source
+    const bytesReceived = path.bytesReceived || 0;
+    const tracks = path.tracks || [];
+    res.json({ live: ready, bytesReceived, tracks, name: ep.name });
+  } catch (e) {
+    res.json({ live: false, error: e.message });
+  }
 });
 
 router.get('/:id/logs', (req, res) => {

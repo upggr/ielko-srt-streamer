@@ -29,14 +29,17 @@ services:
       - "8889"            # WebRTC/WHEP (internal only — proxied via api)
       - "9997"            # REST API (internal only)
     environment:
-      - MTX_LOGLEVEL=warn
+      - MTX_LOGLEVEL=info
       - MTX_HLSADDRESS=:8888
       - MTX_WEBRTCADDRESS=:8889
       - MTX_APIADDRESS=:9997
       - MTX_API=yes
+      # Disable auth entirely — streams and API accessible without credentials
+      - MTX_AUTHMETHOD=no
       - MTX_HLSALWAYSREMUX=yes
       - MTX_HLSSEGMENTCOUNT=6
       - MTX_HLSSEGMENTDURATION=2s
+      - MTX_WEBRTCADDITIONALSERVERS=[]
       - MTX_READTIMEOUT=10s
       - MTX_WRITETIMEOUT=10s
       - MTX_WRITEQUEUESIZE=512
