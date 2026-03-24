@@ -34,8 +34,8 @@ services:
       - MTX_WEBRTCADDRESS=:8889
       - MTX_APIADDRESS=:9997
       - MTX_API=yes
-      # Disable auth entirely — streams and API accessible without credentials
-      - MTX_AUTHMETHOD=no
+      - MTX_AUTHMETHOD=internal
+      - MTX_AUTHINTERNALUSERS=[{"user":"any","pass":"","ips":[],"permissions":[{"action":"publish","path":""},{"action":"read","path":""},{"action":"playback","path":""},{"action":"api","path":""}]}]
       - MTX_HLSALWAYSREMUX=yes
       - MTX_HLSSEGMENTCOUNT=6
       - MTX_HLSSEGMENTDURATION=2s
