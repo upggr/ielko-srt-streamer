@@ -22,11 +22,19 @@ app.use('/api/auth', authRouter);
 app.use('/api/endpoints', requireAuth, endpointsRouter);
 app.use('/api/stats', requireAuth, statsRouter);
 
-// Proxy HLS from mediamtx
-app.use('/hls', createProxyMiddleware({ target: `${MEDIAMTX}:8888`, changeOrigin: true }));
+// Proxy HLS from mediamtx — strip /hls prefix before forwarding
+app.use('/hls', createProxyMiddleware({
+  target: `${MEDIAMTX}:8888`,
+  changeOrigin: true,
+  pathRewrite: { '^/hls': '' },
+}));
 
-// Proxy WebRTC/WHEP from mediamtx
-app.use('/whep', createProxyMiddleware({ target: `${MEDIAMTX}:8889`, changeOrigin: true }));
+// Proxy WebRTC/WHEP from mediamtx — strip /whep prefix before forwarding
+app.use('/whep', createProxyMiddleware({
+  target: `${MEDIAMTX}:8889`,
+  changeOrigin: true,
+  pathRewrite: { '^/whep': '' },
+}));
 
 app.get('/watch/:name', (req, res) => {
   const name = req.params.name;
