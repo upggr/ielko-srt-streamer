@@ -1093,7 +1093,7 @@
       const el = document.getElementById('debug-log');
       const lines = d.logs || [];
       if (!lines.length) {
-        el.textContent = '[ NO LOG OUTPUT YET — START THE ENDPOINT TO SEE FFMPEG OUTPUT ]';
+        el.textContent = '[ NO LOG OUTPUT YET — LOGS APPEAR WHEN YOUTUBE RESTREAM IS ACTIVE ]';
         return;
       }
       el.innerHTML = lines.map(l => {
