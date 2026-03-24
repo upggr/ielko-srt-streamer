@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STREAM CONTROL // UPG</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+    :root {
+      --green: #00ff41;
+      --green-dim: #00cc33;
+      --green-dark: #003d0e;
+      --green-glow: rgba(0, 255, 65, 0.15);
+      --red: #ff2244;
+      --yellow: #ffcc00;
+      --bg: #0a0a0a;
+      --bg2: #0d1a0d;
+      --border: rgba(0, 255, 65, 0.25);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--green);
+      font-family: 'Share Tech Mono', 'Courier New', monospace;
+      font-size: 13px;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Scanline overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    /* --- LOGIN --- */
+    #login-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 24px;
+    }
+
+    .login-box {
+      border: 1px solid var(--green);
+      padding: 40px 48px;
+      background: var(--bg2);
+      box-shadow: 0 0 40px var(--green-glow), inset 0 0 20px rgba(0,255,65,0.03);
+      min-width: 540px;
+    }
+
+    .login-logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .login-logo .ascii {
+      color: var(--green);
+      font-size: 7px;
+      line-height: 1.2;
+      letter-spacing: 0;
+      text-shadow: 0 0 6px var(--green);
+    }
+
+    .login-logo .tagline {
+      color: var(--green-dim);
+      font-size: 10px;
+      margin-top: 8px;
+      letter-spacing: 4px;
+    }
+
+    .field-label {
+      color: var(--green-dim);
+      font-size: 10px;
+      letter-spacing: 3px;
+      margin-bottom: 6px;
+    }
+
+    input[type="password"], input[type="text"], select {
+      width: 100%;
+      background: #000;
+      border: 1px solid var(--border);
+      color: var(--green);
+      font-family: inherit;
+      font-size: 13px;
+      padding: 10px 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--green);
+      box-shadow: 0 0 8px var(--green-glow);
+    }
+
+    .btn {
+      background: transparent;
+      border: 1px solid var(--green);
+      color: var(--green);
+      font-family: inherit;
+      font-size: 12px;
+      letter-spacing: 2px;
+      padding: 10px 20px;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-transform: uppercase;
+    }
+
+    .btn:hover {
+      background: var(--green);
+      color: #000;
+      box-shadow: 0 0 16px var(--green-glow);
+    }
+
+    .btn-full { width: 100%; }
+    .btn-sm { padding: 6px 12px; font-size: 11px; letter-spacing: 1px; }
+
+    .btn-danger {
+      border-color: var(--red);
+      color: var(--red);
+    }
+    .btn-danger:hover { background: var(--red); color: #000; }
+
+    .btn-warn {
+      border-color: var(--yellow);
+      color: var(--yellow);
+    }
+    .btn-warn:hover { background: var(--yellow); color: #000; }
+
+    #login-error {
+      color: var(--red);
+      font-size: 11px;
+      text-align: center;
+      min-height: 16px;
+      margin-top: 8px;
+    }
+
+    /* --- MAIN APP --- */
+    #app { display: none; min-height: 100vh; flex-direction: column; }
+
+    .topbar {
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg2);
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .logo-text {
+      font-size: 14px;
+      letter-spacing: 4px;
+      color: var(--green);
+      text-shadow: 0 0 8px var(--green);
+    }
+
+    .logo-sep { color: var(--border); }
+
+    .sys-info {
+      font-size: 10px;
+      color: var(--green-dim);
+      letter-spacing: 1px;
+    }
+
+    .blink {
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* --- STATS CARDS --- */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1px;
+      border: 1px solid var(--border);
+      margin: 24px;
+      background: var(--border);
+    }
+
+    .stat-card {
+      background: var(--bg2);
+      padding: 20px 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 2px; height: 100%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+    }
+
+    .stat-label {
+      font-size: 9px;
+      letter-spacing: 3px;
+      color: var(--green-dim);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      color: var(--green);
+      text-shadow: 0 0 12px var(--green);
+      line-height: 1;
+    }
+
+    .stat-value.live { color: #00ff41; }
+    .stat-value.red { color: var(--red); text-shadow: 0 0 12px var(--red); }
+    .stat-value.yellow { color: var(--yellow); text-shadow: 0 0 12px var(--yellow); }
+    .stat-value.small { font-size: 14px; margin-top: 6px; }
+
+    /* --- ENDPOINTS --- */
+    .section {
+      margin: 0 24px 24px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section-title {
+      font-size: 11px;
+      letter-spacing: 4px;
+      color: var(--green-dim);
+      text-transform: uppercase;
+    }
+
+    .endpoints-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid var(--border);
+    }
+
+    .endpoints-table th {
+      background: var(--bg2);
+      color: var(--green-dim);
+      font-size: 9px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-weight: normal;
+    }
+
+    .endpoints-table td {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(0,255,65,0.08);
+      vertical-align: middle;
+      color: var(--green);
+    }
+
+    .endpoints-table tr:hover td {
+      background: rgba(0,255,65,0.03);
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      border: 1px solid;
+    }
+
+    .status-badge.running {
+      color: #00ff41;
+      border-color: #00ff41;
+      box-shadow: 0 0 6px rgba(0,255,65,0.3);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .status-badge.stopped {
+      color: var(--green-dim);
+      border-color: var(--border);
+    }
+
+    .status-badge.error {
+      color: var(--red);
+      border-color: var(--red);
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 6px rgba(0,255,65,0.3); }
+      50% { box-shadow: 0 0 14px rgba(0,255,65,0.6); }
+    }
+
+    .proto-tag {
+      display: inline-block;
+      padding: 2px 6px;
+      font-size: 9px;
+      letter-spacing: 1px;
+      border: 1px solid var(--border);
+      color: var(--green-dim);
+    }
+
+    .url-cell {
+      font-size: 10px;
+      color: var(--green-dim);
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    /* --- MODAL --- */
+    #modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #modal-overlay.open { display: flex; }
+
+    .modal {
+      background: var(--bg);
+      border: 1px solid var(--green);
+      box-shadow: 0 0 60px var(--green-glow);
+      padding: 32px;
+      min-width: 440px;
+      max-width: 600px;
+      width: 100%;
+    }
+
+    .modal-title {
+      font-size: 12px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+      color: var(--green);
+    }
+
+    .form-group { margin-bottom: 16px; }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+      justify-content: flex-end;
+    }
+
+    /* Created info box */
+    #created-box {
+      display: none;
+      background: var(--bg2);
+      border: 1px solid var(--green);
+      padding: 20px;
+      margin-top: 20px;
+    }
+
+    .info-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .info-label {
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: var(--green-dim);
+      min-width: 80px;
+      padding-top: 2px;
+    }
+
+    .info-value {
+      flex: 1;
+      font-size: 11px;
+      color: var(--green);
+      word-break: break-all;
+    }
+
+    .copy-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--green-dim);
+      font-family: inherit;
+      font-size: 9px;
+      letter-spacing: 1px;
+      padding: 2px 8px;
+      cursor: pointer;
+    }
+
+    .copy-btn:hover { border-color: var(--green); color: var(--green); }
+
+    #empty-state {
+      text-align: center;
+      padding: 48px;
+      color: var(--green-dim);
+      font-size: 11px;
+      letter-spacing: 2px;
+    }
+
+    .terminal-cursor::after {
+      content: '█';
+      animation: blink 1s step-end infinite;
+    }
+
+    select option { background: #0a0a0a; }
+
+    /* --- PLAYER MODAL --- */
+    #player-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.92);
+      z-index: 150;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+
+    #player-overlay.open { display: flex; }
+
+    .player-container {
+      border: 1px solid var(--green);
+      box-shadow: 0 0 60px var(--green-glow);
+      background: #000;
+      max-width: 900px;
+      width: 96%;
+    }
+
+    .player-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg2);
+    }
+
+    .player-title {
+      font-size: 11px;
+      letter-spacing: 3px;
+      color: var(--green);
+    }
+
+    #player-status {
+      font-size: 10px;
+      color: var(--green-dim);
+      letter-spacing: 2px;
+    }
+
+    #stream-video {
+      width: 100%;
+      display: block;
+      background: #000;
+      min-height: 200px;
+    }
+
+    .player-footer {
+      padding: 10px 16px;
+      border-top: 1px solid var(--border);
+      background: var(--bg2);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .player-url {
+      flex: 1;
+      font-size: 10px;
+      color: var(--green-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .notification {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--bg2);
+      border: 1px solid var(--green);
+      color: var(--green);
+      padding: 12px 20px;
+      font-size: 11px;
+      letter-spacing: 1px;
+      z-index: 200;
+      box-shadow: 0 0 20px var(--green-glow);
+      animation: slideIn 0.2s ease;
+    }
+
+    .notification.error { border-color: var(--red); color: var(--red); }
+
+    @keyframes slideIn {
+      from { transform: translateX(20px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <pre class="ascii">
+██╗ ██████╗ ███╗   ██╗██╗ █████╗ ███╗   ██╗    ████████╗██╗   ██╗
+██║██╔═══██╗████╗  ██║██║██╔══██╗████╗  ██║       ██╔══╝██║   ██║
+██║██║   ██║██╔██╗ ██║██║███████║██╔██╗ ██║       ██║   ██║   ██║
+██║██║   ██║██║╚██╗██║██║██╔══██║██║╚██╗██║       ██║   ╚██╗ ██╔╝
+██║╚██████╔╝██║ ╚████║██║██║  ██║██║ ╚████║       ██║    ╚████╔╝
+╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝       ╚═╝     ╚═══╝  </pre>
+      <div class="tagline">STREAM CONTROL TERMINAL</div>
+    </div>
+    <div class="form-group">
+      <div class="field-label">ACCESS KEY</div>
+      <input type="password" id="login-password" placeholder="enter access key..." autocomplete="off">
+    </div>
+    <button class="btn btn-full" onclick="doLogin()">[ AUTHENTICATE ]</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo-text">UPG // STREAM CTRL</div>
+      <div class="logo-sep">|</div>
+      <div class="sys-info" id="sys-uptime">UPTIME: --</div>
+    </div>
+    <div style="display:flex; gap:16px; align-items:center;">
+      <div class="sys-info"><span class="blink">■</span> SYSTEM ONLINE</div>
+      <button class="btn btn-sm btn-danger" onclick="doLogout()">[ LOGOUT ]</button>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">Total Endpoints</div>
+      <div class="stat-value" id="stat-total">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Live Now</div>
+      <div class="stat-value live" id="stat-live">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Stopped</div>
+      <div class="stat-value yellow" id="stat-stopped">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Error</div>
+      <div class="stat-value red" id="stat-error">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">CPU Load</div>
+      <div class="stat-value small terminal-cursor" id="stat-cpu">--</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Memory</div>
+      <div class="stat-value small" id="stat-mem">--</div>
+    </div>
+  </div>
+
+  <!-- ENDPOINTS -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">// Active Endpoints</div>
+      <button class="btn btn-sm" onclick="openCreateModal()">[ + NEW ENDPOINT ]</button>
+    </div>
+
+    <div id="endpoints-wrap">
+      <div id="empty-state">NO ENDPOINTS CONFIGURED. CREATE ONE TO BEGIN.</div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div style="border-top:1px solid var(--border); padding:12px 24px; text-align:center; color:var(--green-dim); font-size:10px; letter-spacing:2px;">
+    CREATED BY KOKKINIS IOANNIS &nbsp;|&nbsp; UPG STREAM CONTROL &nbsp;|&nbsp; <span class="blink">■</span> ONLINE
+  </div>
+</div>
+
+<!-- PLAYER MODAL -->
+<div id="player-overlay">
+  <div class="player-container">
+    <div class="player-header">
+      <div class="player-title" id="player-title">// STREAM PLAYER</div>
+      <div id="player-status">CONNECTING...</div>
+    </div>
+    <video id="stream-video" controls autoplay muted playsinline></video>
+    <div class="player-footer">
+      <div class="player-url" id="player-url-display"></div>
+      <button class="copy-btn" id="player-copy-btn">COPY URL</button>
+      <button class="copy-btn" id="player-tg-btn" style="color:#2196F3;border-color:#2196F3;">✈ TELEGRAM</button>
+      <button class="btn btn-sm btn-danger" onclick="closePlayer()">[ CLOSE ]</button>
+    </div>
+  </div>
+</div>
+
+<!-- DEBUG MODAL -->
+<div id="debug-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:160;align-items:center;justify-content:center;">
+  <div style="background:var(--bg);border:1px solid var(--green);box-shadow:0 0 40px var(--green-glow);width:96%;max-width:800px;display:flex;flex-direction:column;max-height:85vh;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--bg2);">
+      <div id="debug-title" style="font-size:11px;letter-spacing:3px;color:var(--green);">// DEBUG LOG</div>
+      <div style="display:flex;gap:8px;">
+        <button class="copy-btn" onclick="refreshDebugLog()">REFRESH</button>
+        <button class="btn btn-sm btn-danger" onclick="closeDebug()">[ CLOSE ]</button>
+      </div>
+    </div>
+    <div id="debug-log" style="flex:1;overflow-y:auto;padding:12px 16px;font-size:10px;line-height:1.6;color:var(--green-dim);background:#000;white-space:pre-wrap;word-break:break-all;font-family:monospace;min-height:300px;max-height:60vh;"></div>
+    <div style="padding:8px 16px;border-top:1px solid var(--border);background:var(--bg2);font-size:9px;color:var(--green-dim);letter-spacing:1px;">SHOWING LAST 200 LINES — AUTO-REFRESHES EVERY 3s</div>
+  </div>
+</div>
+
+<!-- YOUTUBE MODAL -->
+<div id="yt-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:160;align-items:center;justify-content:center;">
+  <div style="background:var(--bg);border:1px solid #ff0000;box-shadow:0 0 40px rgba(255,0,0,0.15);width:96%;max-width:480px;padding:32px;">
+    <div style="font-size:12px;letter-spacing:4px;color:#ff0000;margin-bottom:24px;">// YOUTUBE RESTREAM</div>
+    <div id="yt-status-info" style="font-size:11px;color:var(--green-dim);margin-bottom:16px;letter-spacing:1px;"></div>
+    <div class="form-group">
+      <div class="field-label">YOUTUBE STREAM KEY</div>
+      <input type="text" id="yt-stream-key" placeholder="xxxx-xxxx-xxxx-xxxx" autocomplete="off">
+    </div>
+    <div style="font-size:9px;color:var(--green-dim);margin-bottom:20px;letter-spacing:1px;">Get your stream key from YouTube Studio → Go Live → Stream key</div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <button class="btn btn-sm" onclick="closeYT()">[ CANCEL ]</button>
+      <button class="btn btn-sm" id="yt-stop-btn" style="display:none;border-color:#ff6600;color:#ff6600;" onclick="stopYouTube()">[ STOP RESTREAM ]</button>
+      <button class="btn btn-sm" id="yt-start-btn" style="border-color:#ff0000;color:#ff0000;" onclick="startYouTube()">[ START RESTREAM ]</button>
+    </div>
+  </div>
+</div>
+
+<!-- URLS MODAL -->
+<div id="urls-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:160;align-items:center;justify-content:center;">
+  <div style="background:var(--bg);border:1px solid var(--green);box-shadow:0 0 40px var(--green-glow);width:96%;max-width:700px;padding:32px;max-height:85vh;overflow-y:auto;">
+    <div id="urls-title" style="font-size:12px;letter-spacing:4px;color:var(--green);margin-bottom:24px;">// OUTPUT URLs</div>
+    <div id="urls-content"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:20px;">
+      <button class="btn btn-sm btn-danger" onclick="closeURLs()">[ CLOSE ]</button>
+    </div>
+  </div>
+</div>
+
+<!-- CREATE MODAL -->
+<div id="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">// Create Streaming Endpoint</div>
+
+    <div class="form-group">
+      <div class="field-label">ENDPOINT NAME</div>
+      <input type="text" id="ep-name" placeholder="e.g. channel-1" autocomplete="off">
+    </div>
+
+    <div class="form-group">
+      <div class="field-label">PROTOCOL</div>
+      <select id="ep-protocol">
+        <option value="srt">SRT — Secure Reliable Transport</option>
+        <option value="mpegts">MPEGTS — MPEG Transport Stream (UDP)</option>
+        <option value="udp">UDP — Raw UDP</option>
+      </select>
+    </div>
+
+    <div id="created-box">
+      <div id="created-info"></div>
+      <div style="margin-top:12px;">
+        <button class="btn btn-sm" onclick="closeModal()">[ CLOSE ]</button>
+      </div>
+    </div>
+
+    <div class="modal-actions" id="modal-form-actions">
+      <button class="btn btn-sm" onclick="closeModal()">[ CANCEL ]</button>
+      <button class="btn btn-sm" onclick="createEndpoint()">[ CREATE ]</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script>
+  const API = '';
+  let hlsInstance = null;
+  let authToken = localStorage.getItem('srt_token') || '';
+  let refreshInterval = null;
+
+  // Auth check on load
+  (async () => {
+    if (!authToken) return;
+    try {
+      const r = await apiFetch('/api/stats');
+      if (r.ok) showApp();
+      else { authToken = ''; localStorage.removeItem('srt_token'); }
+    } catch { authToken = ''; localStorage.removeItem('srt_token'); }
+  })();
+
+  document.getElementById('login-password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+
+  async function doLogin() {
+    const pw = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = '';
+    try {
+      const r = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw })
+      });
+      const data = await r.json();
+      if (!r.ok) { errEl.textContent = '> ACCESS DENIED: ' + (data.error || ''); return; }
+      authToken = data.token;
+      localStorage.setItem('srt_token', authToken);
+      showApp();
+    } catch (e) {
+      errEl.textContent = '> CONNECTION FAILED';
+    }
+  }
+
+  function showApp() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    refreshAll();
+    refreshInterval = setInterval(refreshAll, 5000);
+  }
+
+  async function doLogout() {
+    await apiFetch('/api/auth/logout', { method: 'POST' });
+    authToken = '';
+    localStorage.removeItem('srt_token');
+    clearInterval(refreshInterval);
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('login-password').value = '';
+  }
+
+  async function apiFetch(url, opts = {}) {
+    return fetch(url, {
+      ...opts,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+        ...(opts.headers || {})
+      }
+    });
+  }
+
+  async function refreshAll() {
+    await Promise.all([refreshStats(), refreshEndpoints()]);
+  }
+
+  async function refreshStats() {
+    try {
+      const r = await apiFetch('/api/stats');
+      if (!r.ok) return;
+      const d = await r.json();
+      document.getElementById('stat-total').textContent = d.endpoints.total;
+      document.getElementById('stat-live').textContent = d.endpoints.live;
+      document.getElementById('stat-stopped').textContent = d.endpoints.stopped;
+      document.getElementById('stat-error').textContent = d.endpoints.errored;
+      document.getElementById('stat-cpu').textContent = d.system.cpuLoad || '--';
+      document.getElementById('stat-mem').textContent = d.system.memFree || '--';
+      document.getElementById('sys-uptime').textContent = 'UPTIME: ' + (d.system.uptime || '--');
+    } catch {}
+  }
+
+  async function refreshEndpoints() {
+    try {
+      const r = await apiFetch('/api/endpoints');
+      if (!r.ok) return;
+      const endpoints = await r.json();
+      renderEndpoints(endpoints);
+    } catch {}
+  }
+
+  function renderEndpoints(endpoints) {
+    const wrap = document.getElementById('endpoints-wrap');
+    if (!endpoints.length) {
+      wrap.innerHTML = '<div id="empty-state">NO ENDPOINTS CONFIGURED. CREATE ONE TO BEGIN.</div>';
+      return;
+    }
+
+    wrap.innerHTML = `
+      <table class="endpoints-table">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Name</th>
+            <th>Protocol</th>
+            <th>Port</th>
+            <th>Sender URL</th>
+            <th>Viewer URL</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${endpoints.map(ep => `
+            <tr>
+              <td><span class="status-badge ${ep.status}">${ep.status === 'running' ? '● LIVE' : ep.status.toUpperCase()}</span></td>
+              <td style="letter-spacing:1px;">${ep.name}</td>
+              <td><span class="proto-tag">${ep.protocol.toUpperCase()}</span></td>
+              <td style="color:#fff;">${ep.port}</td>
+              <td class="url-cell" title="${ep.senderUrl}">
+                ${ep.senderUrl}
+                <br><button class="copy-btn" onclick="copyText('${esc(ep.senderUrl)}')">COPY</button>
+              </td>
+              <td class="url-cell">
+                <a href="#" onclick="openPlayer('${esc(ep.name)}','${esc(ep.hlsUrl)}','${esc(ep.viewerUrl)}');return false;" style="color:var(--green-dim);text-decoration:none;" title="Open player">${ep.viewerUrl}</a>
+                <br>
+                <button class="copy-btn" onclick="copyText('${esc(ep.viewerUrl)}')">COPY</button>
+                <button class="copy-btn" onclick="openPlayer('${esc(ep.name)}','${esc(ep.hlsUrl)}','${esc(ep.viewerUrl)}')">▶ PLAY</button>
+              </td>
+              <td>
+                <div class="actions">
+                  ${ep.status !== 'running'
+                    ? `<button class="btn btn-sm" onclick="startEp('${ep.id}')">START</button>`
+                    : `<button class="btn btn-sm btn-warn" onclick="stopEp('${ep.id}')">STOP</button>`
+                  }
+                  <button class="btn btn-sm" style="border-color:#2196F3;color:#2196F3;" onclick="copyTelegram('${esc(ep.name)}','${esc(ep.viewerUrl)}')">✈ TG</button>
+                  <button class="btn btn-sm" style="border-color:#aa44ff;color:#aa44ff;" onclick="showURLs(${JSON.stringify(ep).replace(/</g,'\\u003c')})">URLS</button>
+                  <button class="btn btn-sm" style="border-color:#ffaa00;color:#ffaa00;" onclick="showDebug('${ep.id}','${esc(ep.name)}')">DEBUG</button>
+                  <button class="btn btn-sm" style="border-color:#ff0000;color:#ff0000;" onclick="openYT('${ep.id}','${esc(ep.name)}','${ep.yt_status || 'off'}','${esc(ep.yt_stream_key || '')}')">YT</button>
+                  <button class="btn btn-sm btn-danger" onclick="deleteEp('${ep.id}', '${ep.name}')">DEL</button>
+                </div>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function esc(s) { return s.replace(/'/g, "\\'"); }
+
+  async function startEp(id) {
+    const r = await apiFetch(`/api/endpoints/${id}/start`, { method: 'POST' });
+    if (!r.ok) { const d = await r.json(); notify('ERROR: ' + d.error, true); return; }
+    notify('ENDPOINT STARTED');
+    refreshAll();
+  }
+
+  async function stopEp(id) {
+    await apiFetch(`/api/endpoints/${id}/stop`, { method: 'POST' });
+    notify('ENDPOINT STOPPED');
+    refreshAll();
+  }
+
+  async function deleteEp(id, name) {
+    if (!confirm(`DELETE endpoint "${name}"?`)) return;
+    await apiFetch(`/api/endpoints/${id}`, { method: 'DELETE' });
+    notify('ENDPOINT DELETED');
+    refreshAll();
+  }
+
+  function openCreateModal() {
+    document.getElementById('ep-name').value = '';
+    document.getElementById('ep-protocol').value = 'srt';
+    document.getElementById('created-box').style.display = 'none';
+    document.getElementById('modal-form-actions').style.display = 'flex';
+    document.getElementById('modal-overlay').classList.add('open');
+  }
+
+  function closeModal() {
+    document.getElementById('modal-overlay').classList.remove('open');
+    refreshAll();
+  }
+
+  document.getElementById('modal-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  async function createEndpoint() {
+    const name = document.getElementById('ep-name').value.trim();
+    const protocol = document.getElementById('ep-protocol').value;
+    if (!name) { notify('NAME REQUIRED', true); return; }
+
+    const r = await apiFetch('/api/endpoints', {
+      method: 'POST',
+      body: JSON.stringify({ name, protocol })
+    });
+    const data = await r.json();
+    if (!r.ok) { notify('ERROR: ' + data.error, true); return; }
+
+    document.getElementById('modal-form-actions').style.display = 'none';
+    document.getElementById('created-box').style.display = 'block';
+
+    let rows = '';
+    rows += infoRow('NAME', data.name);
+    rows += infoRow('PROTOCOL', data.protocol.toUpperCase());
+    rows += infoRow('PORT', data.port);
+    if (data.srt_password) rows += infoRow('PASSPHRASE', data.srt_password);
+    rows += infoRow('SENDER URL', data.senderUrl, true);
+    rows += infoRow('VIEWER URL', data.viewerUrl, true);
+    rows += infoRow('HLS FEED', data.hlsUrl, true);
+
+    document.getElementById('created-info').innerHTML = rows;
+    refreshAll();
+  }
+
+  function infoRow(label, value, copyable = false) {
+    return `<div class="info-row">
+      <div class="info-label">${label}</div>
+      <div class="info-value">${value} ${copyable ? `<button class="copy-btn" onclick="copyText('${esc(String(value))}')">COPY</button>` : ''}</div>
+    </div>`;
+  }
+
+  function copyText(text) {
+    navigator.clipboard.writeText(text).then(() => notify('COPIED TO CLIPBOARD'));
+  }
+
+  function copyTelegram(name, viewerUrl) {
+    const msg = `📡 *${name.toUpperCase()}* — Live Stream\n\n▶️ Watch here:\n${viewerUrl}\n\n_Link opens directly in browser_`;
+    navigator.clipboard.writeText(msg).then(() => notify('TELEGRAM MESSAGE COPIED — PASTE INTO CHAT'));
+  }
+
+  function openPlayer(name, hlsUrl, viewerUrl) {
+    document.getElementById('player-overlay').classList.add('open');
+    document.getElementById('player-title').textContent = '// ' + name.toUpperCase() + ' — LIVE FEED';
+    document.getElementById('player-url-display').textContent = hlsUrl;
+    document.getElementById('player-status').textContent = 'CONNECTING...';
+
+    const copyBtn = document.getElementById('player-copy-btn');
+    copyBtn.onclick = () => copyText(viewerUrl);
+
+    const tgBtn = document.getElementById('player-tg-btn');
+    tgBtn.onclick = () => copyTelegram(name, viewerUrl);
+
+    const video = document.getElementById('stream-video');
+
+    if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+    video.src = '';
+
+    if (Hls.isSupported()) {
+      hlsInstance = new Hls({ liveSyncDurationCount: 3, lowLatencyMode: true });
+      hlsInstance.loadSource(hlsUrl);
+      hlsInstance.attachMedia(video);
+      hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+        document.getElementById('player-status').textContent = '● LIVE';
+        video.play();
+      });
+      hlsInstance.on(Hls.Events.ERROR, (e, d) => {
+        if (d.fatal) document.getElementById('player-status').textContent = 'STREAM OFFLINE';
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = hlsUrl;
+      video.addEventListener('loadedmetadata', () => {
+        document.getElementById('player-status').textContent = '● LIVE';
+        video.play();
+      });
+    } else {
+      document.getElementById('player-status').textContent = 'HLS NOT SUPPORTED';
+    }
+  }
+
+  function closePlayer() {
+    document.getElementById('player-overlay').classList.remove('open');
+    const video = document.getElementById('stream-video');
+    video.pause();
+    video.src = '';
+    if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+  }
+
+  document.getElementById('player-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closePlayer();
+  });
+
+  // --- DEBUG ---
+  let debugEpId = null;
+  let debugInterval = null;
+
+  function showDebug(id, name) {
+    debugEpId = id;
+    document.getElementById('debug-title').textContent = `// DEBUG: ${name.toUpperCase()}`;
+    document.getElementById('debug-overlay').style.display = 'flex';
+    refreshDebugLog();
+    debugInterval = setInterval(refreshDebugLog, 3000);
+  }
+
+  async function refreshDebugLog() {
+    if (!debugEpId) return;
+    try {
+      const r = await apiFetch(`/api/endpoints/${debugEpId}/logs`);
+      const d = await r.json();
+      const el = document.getElementById('debug-log');
+      const lines = d.logs || [];
+      if (!lines.length) {
+        el.textContent = '[ NO LOG OUTPUT YET — START THE ENDPOINT TO SEE FFMPEG OUTPUT ]';
+        return;
+      }
+      el.innerHTML = lines.map(l => {
+        const isErr = l.includes('[ERR]') || l.includes('Error') || l.includes('error');
+        const isYt = l.includes('[YT');
+        const color = isErr ? '#ff2244' : isYt ? '#ff6600' : 'var(--green-dim)';
+        return `<span style="color:${color}">${escHtml(l)}</span>`;
+      }).join('\n');
+      el.scrollTop = el.scrollHeight;
+    } catch {}
+  }
+
+  function closeDebug() {
+    clearInterval(debugInterval);
+    debugInterval = null;
+    debugEpId = null;
+    document.getElementById('debug-overlay').style.display = 'none';
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // --- YOUTUBE ---
+  let ytEpId = null;
+
+  function openYT(id, name, status, key) {
+    ytEpId = id;
+    document.getElementById('yt-stream-key').value = key || '';
+    document.getElementById('yt-status-info').textContent = `ENDPOINT: ${name.toUpperCase()} — STATUS: ${status.toUpperCase()}`;
+    const isLive = status === 'live';
+    document.getElementById('yt-start-btn').style.display = isLive ? 'none' : '';
+    document.getElementById('yt-stop-btn').style.display = isLive ? '' : 'none';
+    document.getElementById('yt-overlay').style.display = 'flex';
+  }
+
+  function closeYT() {
+    document.getElementById('yt-overlay').style.display = 'none';
+    ytEpId = null;
+  }
+
+  async function startYouTube() {
+    const key = document.getElementById('yt-stream-key').value.trim();
+    if (!key) { notify('STREAM KEY REQUIRED', true); return; }
+    const r = await apiFetch(`/api/endpoints/${ytEpId}/youtube/start`, {
+      method: 'POST', body: JSON.stringify({ streamKey: key })
+    });
+    const d = await r.json();
+    if (!r.ok) { notify('YT ERROR: ' + d.error, true); return; }
+    notify('YOUTUBE RESTREAM STARTED');
+    closeYT();
+    refreshAll();
+  }
+
+  async function stopYouTube() {
+    await apiFetch(`/api/endpoints/${ytEpId}/youtube/stop`, { method: 'POST' });
+    notify('YOUTUBE RESTREAM STOPPED');
+    closeYT();
+    refreshAll();
+  }
+
+  // --- URLs MODAL ---
+  function showURLs(ep) {
+    document.getElementById('urls-title').textContent = `// OUTPUT URLs: ${ep.name.toUpperCase()}`;
+    const urlDefs = [
+      { label: 'HLS MASTER (adaptive)', desc: 'All browsers via HLS.js · Safari native', value: ep.hlsUrl, tag: 'HLS' },
+      { label: 'HLS SOURCE QUALITY', desc: 'Full bitrate passthrough', value: ep.hlsSourceUrl, tag: 'HLS' },
+      { label: 'HLS 720p', desc: '4Mbps · h.264 · AAC', value: ep.hls720pUrl, tag: 'HLS' },
+      { label: 'HLS 480p', desc: '1.5Mbps · h.264 · AAC', value: ep.hls480pUrl, tag: 'HLS' },
+      { label: 'HLS 360p', desc: '800kbps · mobile / low bandwidth', value: ep.hls360pUrl, tag: 'HLS' },
+      { label: 'M3U PLAYLIST', desc: 'VLC · IPTV players · Kodi · TV apps', value: ep.m3uUrl, tag: 'M3U' },
+      { label: 'EMBED (iframe)', desc: 'Copy & paste into any website', value: ep.embedUrl, tag: 'WEB', isEmbed: true },
+      { label: 'BROWSER VIEWER', desc: 'Full screen web player', value: ep.viewerUrl, tag: 'WEB' },
+      ep.srtPullUrl ? { label: 'SRT PULL', desc: 'VLC · OBS · ffplay · mpv · Zixi', value: ep.srtPullUrl, tag: 'SRT' } : null,
+      ep.udpUrl ? { label: 'UDP DIRECT', desc: 'VLC · ffplay · mpv', value: ep.udpUrl, tag: 'UDP' } : null,
+    ].filter(Boolean);
+
+    const tagColor = { HLS: '#00ff41', M3U: '#ffcc00', WEB: '#2196F3', SRT: '#aa44ff', UDP: '#ff6600' };
+
+    document.getElementById('urls-content').innerHTML = urlDefs.map(u => {
+      const val = u.isEmbed
+        ? `<iframe src="${u.value}" width="560" height="315" frameborder="0" allowfullscreen></iframe>`
+        : u.value;
+      return `<div style="margin-bottom:14px;padding:12px;border:1px solid var(--border);background:var(--bg2);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <span style="font-size:9px;padding:2px 6px;border:1px solid ${tagColor[u.tag]};color:${tagColor[u.tag]};">${u.tag}</span>
+          <span style="font-size:11px;color:var(--green);letter-spacing:1px;">${u.label}</span>
+          <span style="font-size:9px;color:var(--green-dim);margin-left:auto;">${u.desc}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="flex:1;font-size:10px;color:#aaa;word-break:break-all;">${escHtml(val)}</div>
+          <button class="copy-btn" onclick="copyText('${esc(val)}')">COPY</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    document.getElementById('urls-overlay').style.display = 'flex';
+  }
+
+  function closeURLs() {
+    document.getElementById('urls-overlay').style.display = 'none';
+  }
+
+  function notify(msg, isError = false) {
+    const el = document.createElement('div');
+    el.className = 'notification' + (isError ? ' error' : '');
+    el.textContent = '> ' + msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  }
+</script>
+</body>
+</html>
