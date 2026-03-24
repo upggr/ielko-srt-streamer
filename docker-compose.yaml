@@ -35,13 +35,12 @@ services:
       - MTX_APIADDRESS=:9997
       - MTX_API=yes
       - MTX_AUTHMETHOD=internal
-      - MTX_AUTHINTERNALUSERS=[{"user":"any","pass":"","ips":[],"permissions":[{"action":"publish","path":""},{"action":"read","path":""},{"action":"playback","path":""},{"action":"api","path":""}]}]
+      - MTX_AUTHINTERNALUSERS=[{"user":"any","pass":"","ips":[],"permissions":[{"action":"publish","path":""},{"action":"read","path":""},{"action":"playback","path":""},{"action":"api"},{"action":"metrics"},{"action":"pprof"}]}]
       - MTX_HLSALWAYSREMUX=yes
       - MTX_HLSSEGMENTCOUNT=6
       - MTX_HLSSEGMENTDURATION=2s
-      # Disable LL-HLS — standard HLS works reliably and doesn't need 7+ segments before serving
-      - MTX_HLSPARTDURATION=200ms
-      - MTX_HLSLLHLS=false
+      # Use fmp4 variant (not lowLatency) so HLS works without needing 7+ buffered parts
+      - MTX_HLSVARIANT=fmp4
       - MTX_READTIMEOUT=10s
       - MTX_WRITETIMEOUT=10s
       - MTX_WRITEQUEUESIZE=512
