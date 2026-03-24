@@ -28,22 +28,8 @@ services:
       - "8888"            # HLS output (internal only)
       - "8889"            # WebRTC/WHEP (internal only — proxied via api)
       - "9997"            # REST API (internal only)
-    environment:
-      - MTX_LOGLEVEL=info
-      - MTX_HLSADDRESS=:8888
-      - MTX_WEBRTCADDRESS=:8889
-      - MTX_APIADDRESS=:9997
-      - MTX_API=yes
-      - MTX_AUTHMETHOD=internal
-      - MTX_AUTHINTERNALUSERS=[{"user":"any","pass":"","ips":[],"permissions":[{"action":"publish","path":""},{"action":"read","path":""},{"action":"playback","path":""},{"action":"api"},{"action":"metrics"},{"action":"pprof"}]}]
-      - MTX_HLSALWAYSREMUX=yes
-      - MTX_HLSSEGMENTCOUNT=6
-      - MTX_HLSSEGMENTDURATION=2s
-      # Use fmp4 variant (not lowLatency) so HLS works without needing 7+ buffered parts
-      - MTX_HLSVARIANT=fmp4
-      - MTX_READTIMEOUT=10s
-      - MTX_WRITETIMEOUT=10s
-      - MTX_WRITEQUEUESIZE=512
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
     restart: unless-stopped
 
 volumes:

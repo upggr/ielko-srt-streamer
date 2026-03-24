@@ -1,0 +1,32 @@
+logLevel: info
+
+api: yes
+apiAddress: :9997
+
+hlsAddress: :8888
+hlsAlwaysRemux: yes
+hlsVariant: fmp4
+hlsSegmentCount: 6
+hlsSegmentDuration: 2s
+
+webrtcAddress: :8889
+
+srtAddress: :8890
+
+rtmpAddress: :1935
+
+# Allow any user to publish, read, and use the API without auth
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: publish
+        path:
+      - action: read
+        path:
+      - action: playback
+        path:
+      - action: api
+      - action: metrics
