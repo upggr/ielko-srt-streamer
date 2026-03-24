@@ -3,6 +3,10 @@ logLevel: info
 api: yes
 apiAddress: :9997
 
+# Allow any path to be created dynamically when a publisher connects
+paths:
+  all_others:
+
 hlsAddress: :8888
 hlsAlwaysRemux: yes
 hlsVariant: fmp4
