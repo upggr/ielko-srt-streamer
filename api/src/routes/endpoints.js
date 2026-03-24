@@ -15,7 +15,8 @@ const RTMP_PORT = 1935;
 function buildUrls(protocol, name, srtPassword) {
   let senderUrl;
   if (protocol === 'srt') {
-    senderUrl = `srt://${SERVER_IP}:${SRT_PORT}?streamid=publish:${name}&passphrase=${srtPassword}`;
+    // mediamtx uses streamid for path routing. No SRT crypto passphrase — access control is via streamid token.
+    senderUrl = `srt://${SERVER_IP}:${SRT_PORT}?streamid=publish:${name}&latency=200`;
   } else if (protocol === 'mpegts' || protocol === 'udp') {
     senderUrl = `rtmp://${SERVER_IP}:${RTMP_PORT}/${name}`;
   } else {
@@ -35,7 +36,7 @@ function buildUrls(protocol, name, srtPassword) {
     hls360pUrl: null,
     webrtcUrl: whepUrl,
     m3uUrl: `${PUBLIC_URL}/api/endpoints/${name}/playlist.m3u`,
-    srtPullUrl: protocol === 'srt' ? `srt://${SERVER_IP}:${SRT_PORT}?streamid=read:${name}&passphrase=${srtPassword}` : null,
+    srtPullUrl: protocol === 'srt' ? `srt://${SERVER_IP}:${SRT_PORT}?streamid=read:${name}&latency=200` : null,
     udpUrl: null,
     rtmpUrl: `rtmp://${SERVER_IP}:${RTMP_PORT}/${name}`,
     embedUrl: `${PUBLIC_URL}/embed/${name}`,

@@ -800,12 +800,11 @@
         }
         if (d.live) {
           badge.innerHTML = kbps != null
-            ? `● LIVE &nbsp;<span style="font-size:9px;opacity:0.8;">${kbps} kbps</span>`
-            : '● LIVE';
+            ? `● RECEIVING &nbsp;<span style="font-size:9px;opacity:0.8;">${kbps} kbps</span>`
+            : '● RECEIVING';
           badge.className = 'status-badge running';
         } else {
-          // Stream not active — update status badge
-          badge.textContent = 'STOPPED';
+          badge.textContent = 'OFFLINE';
           badge.className = 'status-badge stopped';
         }
       } catch {}
@@ -847,10 +846,9 @@
       <table class="endpoints-table">
         <thead>
           <tr>
-            <th>Status</th>
+            <th>Signal</th>
             <th>Name</th>
             <th>Protocol</th>
-            <th>Port</th>
             <th>Sender URL</th>
             <th>Viewer URL</th>
             <th>Actions</th>
@@ -859,10 +857,9 @@
         <tbody>
           ${endpoints.map(ep => `
             <tr>
-              <td><span class="status-badge ${ep.status}" data-epid="${ep.status === 'running' ? ep.id : ''}">${ep.status === 'running' ? '● LIVE' : ep.status.toUpperCase()}</span></td>
+              <td><span class="status-badge ${ep.status === 'running' ? 'running' : 'stopped'}" data-epid="${ep.id}">${ep.status === 'running' ? '● RECEIVING' : 'OFFLINE'}</span></td>
               <td style="letter-spacing:1px;">${ep.name}</td>
               <td><span class="proto-tag">${ep.protocol.toUpperCase()}</span></td>
-              <td style="color:#fff;">${ep.port}</td>
               <td class="url-cell" title="${ep.senderUrl}">
                 ${ep.senderUrl}
                 <br><button class="copy-btn" onclick="copyText('${esc(ep.senderUrl)}')">COPY</button>
@@ -875,10 +872,6 @@
               </td>
               <td>
                 <div class="actions">
-                  ${ep.status !== 'running'
-                    ? `<button class="btn btn-sm" onclick="startEp('${ep.id}')">START</button>`
-                    : `<button class="btn btn-sm btn-warn" onclick="stopEp('${ep.id}')">STOP</button>`
-                  }
                   <button class="btn btn-sm" style="border-color:#2196F3;color:#2196F3;" onclick="copyTelegram('${esc(ep.name)}','${esc(ep.viewerUrl)}')">✈ TG</button>
                   <button class="btn btn-sm" style="border-color:#aa44ff;color:#aa44ff;" onclick="showURLs(${JSON.stringify(ep).replace(/</g,'\\u003c')})">URLS</button>
                   <button class="btn btn-sm" style="border-color:#ffaa00;color:#ffaa00;" onclick="showDebug('${ep.id}','${esc(ep.name)}')">DEBUG</button>

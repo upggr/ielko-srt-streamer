@@ -39,7 +39,9 @@ services:
       - MTX_HLSALWAYSREMUX=yes
       - MTX_HLSSEGMENTCOUNT=6
       - MTX_HLSSEGMENTDURATION=2s
-      - MTX_WEBRTCADDITIONALSERVERS=[]
+      # Disable LL-HLS — standard HLS works reliably and doesn't need 7+ segments before serving
+      - MTX_HLSPARTDURATION=200ms
+      - MTX_HLSLLHLS=false
       - MTX_READTIMEOUT=10s
       - MTX_WRITETIMEOUT=10s
       - MTX_WRITEQUEUESIZE=512
