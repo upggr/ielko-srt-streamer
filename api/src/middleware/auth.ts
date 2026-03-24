@@ -10,7 +10,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 
   const token = authHeader.slice(7);
   const session = db.prepare(
-    'SELECT * FROM sessions WHERE token = ? AND expires_at > datetime("now")'
+    "SELECT * FROM sessions WHERE token = ? AND expires_at > datetime('now')"
   ).get(token);
 
   if (!session) {

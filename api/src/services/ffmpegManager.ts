@@ -104,7 +104,7 @@ export function startEndpoint(id: string, name: string, protocol: string, port: 
   const proc = spawn('ffmpeg', args);
 
   processes.set(id, proc);
-  db.prepare('UPDATE endpoints SET status = ?, ffmpeg_pid = ?, updated_at = datetime("now") WHERE id = ?')
+  db.prepare('UPDATE endpoints SET status = ?, ffmpeg_pid = ?, updated_at = datetime('now') WHERE id = ?')
     .run('running', proc.pid, id);
 
   logs.set(id, []);
@@ -120,7 +120,7 @@ export function startEndpoint(id: string, name: string, protocol: string, port: 
   proc.on('close', (code) => {
     processes.delete(id);
     const status = code === 0 ? 'stopped' : 'error';
-    db.prepare('UPDATE endpoints SET status = ?, ffmpeg_pid = NULL, updated_at = datetime("now") WHERE id = ?')
+    db.prepare('UPDATE endpoints SET status = ?, ffmpeg_pid = NULL, updated_at = datetime('now') WHERE id = ?')
       .run(status, id);
     console.log(`[${name}] ffmpeg exited with code ${code}`);
   });

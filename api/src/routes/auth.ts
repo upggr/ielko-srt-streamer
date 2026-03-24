@@ -35,7 +35,7 @@ router.post('/login', (req, res) => {
   db.prepare('INSERT INTO sessions (token, expires_at) VALUES (?, ?)').run(token, expiresAt);
 
   // clean expired sessions
-  db.prepare('DELETE FROM sessions WHERE expires_at < datetime("now")').run();
+  db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run();
 
   res.json({ token });
 });
