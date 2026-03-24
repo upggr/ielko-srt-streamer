@@ -413,6 +413,39 @@
 
     .copy-btn:hover { border-color: var(--green); color: var(--green); }
 
+    .encoder-help-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10px;
+      margin: 16px 0;
+      color: var(--green-dim);
+    }
+    .encoder-help-table th,
+    .encoder-help-table td {
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .encoder-help-table th {
+      color: var(--green);
+      letter-spacing: 1px;
+      font-size: 9px;
+      width: 38%;
+    }
+    .encoder-help-table td code {
+      color: var(--green);
+      font-size: 10px;
+      word-break: break-all;
+    }
+    .encoder-help-steps {
+      font-size: 10px;
+      color: var(--green-dim);
+      line-height: 1.55;
+      margin-bottom: 12px;
+    }
+    .encoder-help-steps li { margin-bottom: 6px; }
+
     #empty-state {
       text-align: center;
       padding: 48px;
@@ -655,6 +688,18 @@
   </div>
 </div>
 
+<!-- ENCODER HELP (OBS / vMix SRT) -->
+<div id="encoder-help-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:165;align-items:center;justify-content:center;">
+  <div style="background:var(--bg);border:1px solid var(--green);box-shadow:0 0 40px var(--green-glow);width:96%;max-width:560px;padding:28px 32px;max-height:88vh;overflow-y:auto;">
+    <div id="encoder-help-title" style="font-size:12px;letter-spacing:4px;color:var(--green);margin-bottom:16px;">// ENCODER</div>
+    <div id="encoder-help-body"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:20px;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button type="button" class="copy-btn" id="encoder-help-copy-url" style="display:none;">COPY FULL URL</button>
+      <button type="button" class="btn btn-sm btn-danger" onclick="closeEncoderHelp()">[ CLOSE ]</button>
+    </div>
+  </div>
+</div>
+
 <!-- URLS MODAL -->
 <div id="urls-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:160;align-items:center;justify-content:center;">
   <div style="background:var(--bg);border:1px solid var(--green);box-shadow:0 0 40px var(--green-glow);width:96%;max-width:700px;padding:32px;max-height:85vh;overflow-y:auto;">
@@ -862,7 +907,11 @@
               <td><span class="proto-tag">${ep.protocol.toUpperCase()}</span></td>
               <td class="url-cell" title="${ep.senderUrl}">
                 ${ep.senderUrl}
-                <br><button class="copy-btn" onclick="copyText('${esc(ep.senderUrl)}')">COPY</button>
+                <br><span style="display:inline-flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center;">
+                  <button type="button" class="copy-btn" onclick="copyText(${JSON.stringify(ep.senderUrl)})">COPY</button>
+                  ${ep.protocol === 'srt' ? `<button type="button" class="copy-btn" title="OBS Studio SRT" onclick="openEncoderHelp('obs', ${JSON.stringify(ep.senderUrl)})">OBS</button>
+                  <button type="button" class="copy-btn" title="vMix SRT" onclick="openEncoderHelp('vmix', ${JSON.stringify(ep.senderUrl)})">vMIX</button>` : ''}
+                </span>
               </td>
               <td class="url-cell">
                 <a href="#" onclick="openPlayer('${esc(ep.name)}','${esc(ep.hlsUrl)}','${esc(ep.viewerUrl)}','${esc(ep.webrtcUrl||'')}');return false;" style="color:var(--green-dim);text-decoration:none;" title="Open player">${ep.viewerUrl}</a>
@@ -946,6 +995,15 @@
     rows += infoRow('PORT', data.port);
     if (data.srt_password) rows += infoRow('PASSPHRASE', data.srt_password);
     rows += infoRow('SENDER URL', data.senderUrl, true);
+    if (data.protocol === 'srt') {
+      rows += `<div class="info-row">
+        <div class="info-label">ENCODER</div>
+        <div class="info-value" style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" class="copy-btn" onclick="openEncoderHelp('obs', ${JSON.stringify(data.senderUrl)})">OBS — fields</button>
+          <button type="button" class="copy-btn" onclick="openEncoderHelp('vmix', ${JSON.stringify(data.senderUrl)})">vMIX — fields</button>
+        </div>
+      </div>`;
+    }
     rows += infoRow('VIEWER URL', data.viewerUrl, true);
     rows += infoRow('HLS FEED', data.hlsUrl, true);
 
@@ -954,14 +1012,109 @@
   }
 
   function infoRow(label, value, copyable = false) {
+    const v = String(value);
+    const copyBtn = copyable
+      ? `<button type="button" class="copy-btn" onclick="copyText(${JSON.stringify(v)})">COPY</button>`
+      : '';
     return `<div class="info-row">
-      <div class="info-label">${label}</div>
-      <div class="info-value">${value} ${copyable ? `<button class="copy-btn" onclick="copyText('${esc(String(value))}')">COPY</button>` : ''}</div>
+      <div class="info-label">${escapeHtml(label)}</div>
+      <div class="info-value">${escapeHtml(v)} ${copyBtn}</div>
     </div>`;
   }
 
   function copyText(text) {
     navigator.clipboard.writeText(text).then(() => notify('COPIED TO CLIPBOARD'));
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /** Parse srt://host:port?streamid=...&latency=... for encoder UIs */
+  function parseSrtSender(url) {
+    const out = { full: url, host: '', port: '8890', streamid: '', latency: '200' };
+    if (!url || typeof url !== 'string') return out;
+    const m = url.trim().match(/^srt:\/\/([^/?#]+)(?::(\d+))?(\?[^#]*)?$/i);
+    if (!m) return out;
+    out.host = m[1];
+    if (m[2]) out.port = m[2];
+    if (m[3]) {
+      const q = m[3].startsWith('?') ? m[3].slice(1) : m[3];
+      const p = new URLSearchParams(q);
+      const sid = p.get('streamid');
+      if (sid) out.streamid = sid;
+      const lat = p.get('latency');
+      if (lat) out.latency = lat;
+    }
+    return out;
+  }
+
+  let encoderHelpFullUrl = '';
+
+  function closeEncoderHelp() {
+    document.getElementById('encoder-help-overlay').style.display = 'none';
+    encoderHelpFullUrl = '';
+  }
+
+  document.getElementById('encoder-help-overlay').addEventListener('click', function (e) {
+    if (e.target === this) closeEncoderHelp();
+  });
+
+  function openEncoderHelp(app, senderUrl) {
+    const p = parseSrtSender(senderUrl);
+    encoderHelpFullUrl = p.full;
+    const title = app === 'vmix' ? '// vMIX — SRT PUSH' : '// OBS STUDIO — SRT PUSH';
+    document.getElementById('encoder-help-title').textContent = title;
+
+    const copyBtn = document.getElementById('encoder-help-copy-url');
+    copyBtn.style.display = 'inline-block';
+    copyBtn.onclick = () => copyText(encoderHelpFullUrl);
+
+    let steps = '';
+    let tableRows = '';
+
+    if (app === 'obs') {
+      steps = `<ol class="encoder-help-steps">
+        <li>Open <strong>Settings</strong> → <strong>Stream</strong>.</li>
+        <li>Set <strong>Service</strong> to <strong>Custom</strong>, or choose <strong>SRT</strong> if your OBS version lists it.</li>
+        <li><strong>Mode:</strong> Caller (OBS connects to the server — default for this URL).</li>
+        <li>If there is one <strong>Server</strong> / <strong>URL</strong> field: paste the <strong>full sender URL</strong> (see below). If OBS splits host/port, use the table.</li>
+        <li>Match <strong>latency</strong> to the value in the URL (ms) or leave default if unsure.</li>
+      </ol>`;
+      tableRows = `
+        <tr><th>Server / hostname</th><td><code>${escapeHtml(p.host)}</code></td></tr>
+        <tr><th>Port</th><td><code>${escapeHtml(p.port)}</code></td></tr>
+        <tr><th>Stream ID / Passphrase field</th><td><code>${escapeHtml(p.streamid)}</code> <span style="opacity:0.75">(must include <code>publish:</code> prefix for this platform)</span></td></tr>
+        <tr><th>Latency (ms)</th><td><code>${escapeHtml(p.latency)}</code></td></tr>
+        <tr><th>Full URL (single field)</th><td><code>${escapeHtml(p.full)}</code></td></tr>`;
+    } else {
+      steps = `<ol class="encoder-help-steps">
+        <li>Open the output you use to send the program feed (e.g. <strong>Settings</strong> → <strong>Outputs</strong> / <strong>External</strong> — exact menu depends on vMix edition).</li>
+        <li>Add or edit an <strong>SRT</strong> output in <strong>Caller</strong> mode (connect out to a listener).</li>
+        <li>Enter <strong>hostname</strong> and <strong>port</strong> from the table, and set <strong>Stream ID</strong> (or equivalent) to the streamid value exactly as shown.</li>
+        <li>If vMix offers a single <strong>URL</strong> box, paste the <strong>full sender URL</strong> below.</li>
+      </ol>`;
+      tableRows = `
+        <tr><th>Hostname / address</th><td><code>${escapeHtml(p.host)}</code></td></tr>
+        <tr><th>Port</th><td><code>${escapeHtml(p.port)}</code></td></tr>
+        <tr><th>Stream ID</th><td><code>${escapeHtml(p.streamid)}</code></td></tr>
+        <tr><th>Latency (ms)</th><td><code>${escapeHtml(p.latency)}</code></td></tr>
+        <tr><th>Full URL</th><td><code>${escapeHtml(p.full)}</code></td></tr>`;
+    }
+
+    document.getElementById('encoder-help-body').innerHTML = `
+      ${steps}
+      <div style="font-size:9px;letter-spacing:2px;color:var(--green);margin-bottom:8px;">REQUIRED FIELDS</div>
+      <table class="encoder-help-table"><tbody>${tableRows}</tbody></table>
+      <p style="font-size:9px;color:var(--green-dim);line-height:1.5;opacity:0.9;">Labels in OBS/vMix may differ slightly by version. When in doubt, paste the <strong>full URL</strong> into any field that accepts an SRT connection string.</p>
+    `;
+
+    const el = document.getElementById('encoder-help-overlay');
+    el.style.display = 'flex';
   }
 
   function copyTelegram(name, viewerUrl) {
@@ -1182,9 +1335,14 @@
           <span style="font-size:9px;color:var(--green-dim);margin-left:auto;">${u.desc}</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <div style="flex:1;font-size:10px;color:#aaa;word-break:break-all;">${escHtml(val)}</div>
-          <button class="copy-btn" onclick="copyText('${esc(val)}')">COPY</button>
+          <div style="flex:1;font-size:10px;color:#aaa;word-break:break-all;">${u.isEmbed ? val : escHtml(val)}</div>
+          <button type="button" class="copy-btn" onclick="copyText(${JSON.stringify(u.value)})">COPY</button>
         </div>
+        ${u.label === 'SENDER URL' && ep.protocol === 'srt' ? `<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          <span style="font-size:9px;color:var(--green-dim);letter-spacing:1px;margin-right:4px;">ENCODER HELP</span>
+          <button type="button" class="copy-btn" onclick="openEncoderHelp('obs', ${JSON.stringify(ep.senderUrl)})">OBS</button>
+          <button type="button" class="copy-btn" onclick="openEncoderHelp('vmix', ${JSON.stringify(ep.senderUrl)})">vMIX</button>
+        </div>` : ''}
       </div>`;
     }).join('');
 
