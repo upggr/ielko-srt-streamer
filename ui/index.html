@@ -828,10 +828,10 @@
                 <br><button class="copy-btn" onclick="copyText('${esc(ep.senderUrl)}')">COPY</button>
               </td>
               <td class="url-cell">
-                <a href="#" onclick="openPlayer('${esc(ep.name)}','${esc(ep.hlsUrl)}','${esc(ep.viewerUrl)}');return false;" style="color:var(--green-dim);text-decoration:none;" title="Open player">${ep.viewerUrl}</a>
+                <a href="#" onclick="openPlayer('${esc(ep.name)}','${esc(ep.hlsUrl)}','${esc(ep.viewerUrl)}','${esc(ep.webrtcUrl||'')}');return false;" style="color:var(--green-dim);text-decoration:none;" title="Open player">${ep.viewerUrl}</a>
                 <br>
                 <button class="copy-btn" onclick="copyText('${esc(ep.viewerUrl)}')">COPY</button>
-                <button class="copy-btn" onclick="openPlayer('${esc(ep.name)}','${esc(ep.hlsUrl)}','${esc(ep.viewerUrl)}')">▶ PLAY</button>
+                <button class="copy-btn" onclick="openPlayer('${esc(ep.name)}','${esc(ep.hlsUrl)}','${esc(ep.viewerUrl)}','${esc(ep.webrtcUrl||'')}')">▶ PLAY</button>
               </td>
               <td>
                 <div class="actions">
@@ -936,10 +936,12 @@
     navigator.clipboard.writeText(msg).then(() => notify('TELEGRAM MESSAGE COPIED — PASTE INTO CHAT'));
   }
 
-  function openPlayer(name, hlsUrl, viewerUrl) {
+  let playerWhepPc = null;
+
+  function openPlayer(name, hlsUrl, viewerUrl, whepUrl) {
     document.getElementById('player-overlay').classList.add('open');
     document.getElementById('player-title').textContent = '// ' + name.toUpperCase() + ' — LIVE FEED';
-    document.getElementById('player-url-display').textContent = hlsUrl;
+    document.getElementById('player-url-display').textContent = whepUrl || hlsUrl;
     document.getElementById('player-status').textContent = 'CONNECTING...';
 
     const copyBtn = document.getElementById('player-copy-btn');
@@ -951,15 +953,64 @@
     const video = document.getElementById('stream-video');
 
     if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+    if (playerWhepPc) { try { playerWhepPc.close(); } catch {} playerWhepPc = null; }
     video.src = '';
+    video.srcObject = null;
 
+    // Try WebRTC (WHEP) first if available
+    if (whepUrl && window.RTCPeerConnection) {
+      tryWhep(whepUrl, hlsUrl, video);
+    } else {
+      startHls(hlsUrl, video);
+    }
+  }
+
+  async function tryWhep(whepUrl, hlsUrl, video) {
+    try {
+      const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      playerWhepPc = pc;
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      const r = await fetch(whepUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/sdp' },
+        body: offer.sdp
+      });
+      if (!r.ok) throw new Error('WHEP ' + r.status);
+      const sdp = await r.text();
+      await pc.setRemoteDescription({ type: 'answer', sdp });
+      const ms = new MediaStream();
+      pc.ontrack = e => {
+        ms.addTrack(e.track);
+        video.srcObject = ms;
+        document.getElementById('player-status').textContent = '● LIVE (WebRTC)';
+        video.play().catch(() => {});
+      };
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+          document.getElementById('player-status').textContent = 'WebRTC LOST — fallback HLS';
+          pc.close();
+          playerWhepPc = null;
+          video.srcObject = null;
+          startHls(hlsUrl, video);
+        }
+      };
+    } catch (e) {
+      console.warn('WebRTC failed, falling back to HLS:', e.message);
+      startHls(hlsUrl, video);
+    }
+  }
+
+  function startHls(hlsUrl, video) {
     if (Hls.isSupported()) {
       hlsInstance = new Hls({ liveSyncDurationCount: 3, lowLatencyMode: true });
       hlsInstance.loadSource(hlsUrl);
       hlsInstance.attachMedia(video);
       hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-        document.getElementById('player-status').textContent = '● LIVE';
-        video.play();
+        document.getElementById('player-status').textContent = '● LIVE (HLS)';
+        video.play().catch(() => {});
       });
       hlsInstance.on(Hls.Events.ERROR, (e, d) => {
         if (d.fatal) document.getElementById('player-status').textContent = 'STREAM OFFLINE';
@@ -968,7 +1019,7 @@
       video.src = hlsUrl;
       video.addEventListener('loadedmetadata', () => {
         document.getElementById('player-status').textContent = '● LIVE';
-        video.play();
+        video.play().catch(() => {});
       });
     } else {
       document.getElementById('player-status').textContent = 'HLS NOT SUPPORTED';
@@ -980,7 +1031,9 @@
     const video = document.getElementById('stream-video');
     video.pause();
     video.src = '';
+    video.srcObject = null;
     if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+    if (playerWhepPc) { try { playerWhepPc.close(); } catch {} playerWhepPc = null; }
   }
 
   document.getElementById('player-overlay').addEventListener('click', function(e) {
@@ -1073,19 +1126,17 @@
   function showURLs(ep) {
     document.getElementById('urls-title').textContent = `// OUTPUT URLs: ${ep.name.toUpperCase()}`;
     const urlDefs = [
-      { label: 'HLS MASTER (adaptive)', desc: 'All browsers via HLS.js · Safari native', value: ep.hlsUrl, tag: 'HLS' },
-      { label: 'HLS SOURCE QUALITY', desc: 'Full bitrate passthrough', value: ep.hlsSourceUrl, tag: 'HLS' },
-      { label: 'HLS 720p', desc: '4Mbps · h.264 · AAC', value: ep.hls720pUrl, tag: 'HLS' },
-      { label: 'HLS 480p', desc: '1.5Mbps · h.264 · AAC', value: ep.hls480pUrl, tag: 'HLS' },
-      { label: 'HLS 360p', desc: '800kbps · mobile / low bandwidth', value: ep.hls360pUrl, tag: 'HLS' },
+      ep.webrtcUrl ? { label: 'WebRTC / WHEP', desc: 'Ultra-low latency (<1s) · Browser native · No plugin', value: ep.webrtcUrl, tag: 'RTC' } : null,
+      { label: 'HLS (adaptive)', desc: 'All browsers via HLS.js · Safari native', value: ep.hlsUrl, tag: 'HLS' },
       { label: 'M3U PLAYLIST', desc: 'VLC · IPTV players · Kodi · TV apps', value: ep.m3uUrl, tag: 'M3U' },
       { label: 'EMBED (iframe)', desc: 'Copy & paste into any website', value: ep.embedUrl, tag: 'WEB', isEmbed: true },
       { label: 'BROWSER VIEWER', desc: 'Full screen web player', value: ep.viewerUrl, tag: 'WEB' },
       ep.srtPullUrl ? { label: 'SRT PULL', desc: 'VLC · OBS · ffplay · mpv · Zixi', value: ep.srtPullUrl, tag: 'SRT' } : null,
-      ep.udpUrl ? { label: 'UDP DIRECT', desc: 'VLC · ffplay · mpv', value: ep.udpUrl, tag: 'UDP' } : null,
+      ep.rtmpUrl ? { label: 'RTMP', desc: 'OBS · vMix · Wirecast · streaming encoders', value: ep.rtmpUrl, tag: 'RTMP' } : null,
+      { label: 'SENDER URL', desc: 'Push stream from encoder / OBS', value: ep.senderUrl, tag: 'PUSH' },
     ].filter(Boolean);
 
-    const tagColor = { HLS: '#00ff41', M3U: '#ffcc00', WEB: '#2196F3', SRT: '#aa44ff', UDP: '#ff6600' };
+    const tagColor = { RTC: '#00ffff', HLS: '#00ff41', M3U: '#ffcc00', WEB: '#2196F3', SRT: '#aa44ff', UDP: '#ff6600', RTMP: '#ff6600', PUSH: '#ff4444' };
 
     document.getElementById('urls-content').innerHTML = urlDefs.map(u => {
       const val = u.isEmbed

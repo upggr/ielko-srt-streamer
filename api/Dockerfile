@@ -18,7 +18,7 @@ RUN npm install --omit=dev
 COPY api/src ./src
 COPY ui ./ui
 
-RUN mkdir -p /data /hls
+RUN mkdir -p /data
 
 ENV NODE_ENV=production
 EXPOSE 3000

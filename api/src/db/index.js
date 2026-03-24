@@ -18,7 +18,7 @@ db.exec(`
     id           TEXT PRIMARY KEY,
     name         TEXT NOT NULL UNIQUE,
     protocol     TEXT NOT NULL,
-    port         INTEGER NOT NULL UNIQUE,
+    port         INTEGER NOT NULL DEFAULT 0,
     status       TEXT NOT NULL DEFAULT 'stopped',
     srt_password TEXT,
     ffmpeg_pid   INTEGER,
