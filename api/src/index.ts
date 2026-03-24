@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 import './db'; // init DB
 import { recoverState } from './services/ffmpegManager';
 import authRouter from './routes/auth';
@@ -23,10 +24,24 @@ app.use('/api/auth', authRouter);
 app.use('/api/endpoints', requireAuth, endpointsRouter);
 app.use('/api/stats', requireAuth, statsRouter);
 
+// Proxy HLS and DASH to hls-nginx (so only port 3000 needs to be exposed)
+const hlsProxy = createProxyMiddleware({
+  target: 'http://hls-nginx:8080',
+  changeOrigin: true,
+  on: {
+    proxyRes: (proxyRes) => {
+      proxyRes.headers['cache-control'] = 'no-cache';
+      proxyRes.headers['access-control-allow-origin'] = '*';
+    }
+  }
+});
+app.use('/hls', hlsProxy);
+app.use('/dash', hlsProxy);
+
 // Viewer page
 app.get('/watch/:name', (req, res) => {
   const name = req.params.name;
-  const hlsUrl = `${PUBLIC_URL}/hls/${name}/index.m3u8`;
+  const hlsUrl = `${PUBLIC_URL}/hls/${name}/master.m3u8`;
   res.send(`<!DOCTYPE html>
 <html>
 <head>
