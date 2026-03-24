@@ -20,32 +20,54 @@ function appendLog(id, line) {
 
 function buildArgs(protocol, port, name, srtPassword) {
   const streamDir = path.join(HLS_DIR, name);
-  let inputArgs;
+  let input;
   if (protocol === 'srt') {
     let url = `srt://0.0.0.0:${port}?mode=listener`;
     if (srtPassword) url += `&passphrase=${srtPassword}`;
-    inputArgs = ['-i', url];
+    input = url;
   } else {
-    inputArgs = ['-i', `udp://0.0.0.0:${port}?timeout=5000000`];
+    input = `udp://0.0.0.0:${port}?timeout=5000000`;
   }
+
+  // Use filter_complex to split video into 3 transcoded renditions + 1 passthrough audio
+  // v0 = source (video copy), v1 = 720p, v2 = 480p, v3 = 360p
+  const filterComplex = [
+    '[0:v]split=3[v720][v480][v360]',
+    '[v720]scale=-2:720[out720]',
+    '[v480]scale=-2:480[out480]',
+    '[v360]scale=-2:360[out360]',
+  ].join(';');
 
   return [
     '-loglevel', 'warning',
-    ...inputArgs,
+    '-i', input,
+
+    '-filter_complex', filterComplex,
+
+    // Stream 0: source video (copy) + audio
     '-map', '0:v:0', '-map', '0:a:0',
-    '-c:v:0', 'copy', '-c:a:0', 'aac', '-b:a:0', '192k', '-ac', '2',
-    '-map', '0:v:0', '-map', '0:a:0',
+    '-c:v:0', 'copy',
+    '-c:a:0', 'aac', '-b:a:0', '192k', '-ac:0', '2',
+
+    // Stream 1: 720p
+    '-map', '[out720]', '-map', '0:a:0',
     '-c:v:1', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency',
-    '-vf:1', 'scale=-2:720', '-b:v:1', '4000k', '-maxrate:1', '4500k', '-bufsize:1', '8000k',
-    '-c:a:1', 'aac', '-b:a:1', '128k', '-ac', '2',
-    '-map', '0:v:0', '-map', '0:a:0',
+    '-b:v:1', '4000k', '-maxrate:1', '4500k', '-bufsize:1', '8000k',
+    '-c:a:1', 'aac', '-b:a:1', '128k', '-ac:1', '2',
+
+    // Stream 2: 480p
+    '-map', '[out480]', '-map', '0:a:0',
     '-c:v:2', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency',
-    '-vf:2', 'scale=-2:480', '-b:v:2', '1500k', '-maxrate:2', '2000k', '-bufsize:2', '3000k',
-    '-c:a:2', 'aac', '-b:a:2', '96k', '-ac', '2',
-    '-map', '0:v:0', '-map', '0:a:0',
+    '-b:v:2', '1500k', '-maxrate:2', '2000k', '-bufsize:2', '3000k',
+    '-c:a:2', 'aac', '-b:a:2', '96k', '-ac:2', '2',
+
+    // Stream 3: 360p
+    '-map', '[out360]', '-map', '0:a:0',
     '-c:v:3', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency',
-    '-vf:3', 'scale=-2:360', '-b:v:3', '800k', '-maxrate:3', '1000k', '-bufsize:3', '2000k',
-    '-c:a:3', 'aac', '-b:a:3', '64k', '-ac', '2',
+    '-b:v:3', '800k', '-maxrate:3', '1000k', '-bufsize:3', '2000k',
+    '-c:a:3', 'aac', '-b:a:3', '64k', '-ac:3', '2',
+
+    // HLS multi-variant output
     '-f', 'hls',
     '-hls_time', '2',
     '-hls_list_size', '6',
