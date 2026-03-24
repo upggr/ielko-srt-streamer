@@ -28,12 +28,6 @@ app.use('/api/stats', requireAuth, statsRouter);
 const hlsProxy = createProxyMiddleware({
   target: 'http://hls-nginx:8080',
   changeOrigin: true,
-  on: {
-    proxyRes: (proxyRes) => {
-      proxyRes.headers['cache-control'] = 'no-cache';
-      proxyRes.headers['access-control-allow-origin'] = '*';
-    }
-  }
 });
 app.use('/hls', hlsProxy);
 app.use('/dash', hlsProxy);
