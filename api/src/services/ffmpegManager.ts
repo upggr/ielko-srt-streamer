@@ -143,6 +143,8 @@ export function isRunning(id: string): boolean {
 export function recoverState(): void {
   db.prepare("UPDATE endpoints SET status = 'stopped', ffmpeg_pid = NULL WHERE status = 'running'").run();
   db.prepare("UPDATE endpoints SET yt_status = 'off', yt_pid = NULL WHERE yt_status = 'live'").run();
+  db.prepare("UPDATE endpoints SET fb_status = 'off', fb_pid = NULL WHERE fb_status = 'live'").run();
+  db.prepare("UPDATE endpoints SET ig_status = 'off', ig_pid = NULL WHERE ig_status = 'live'").run();
 }
 
 // YouTube restream processes
@@ -189,4 +191,94 @@ export function stopYouTube(id: string): void {
   if (!proc) return;
   proc.kill('SIGTERM');
   setTimeout(() => { if (ytProcesses.has(id)) proc.kill('SIGKILL'); }, 3000);
+}
+
+// Facebook restream processes
+const fbProcesses = new Map<string, ChildProcess>();
+
+export function startFacebook(id: string, name: string, streamKey: string): void {
+  if (fbProcesses.has(id)) throw new Error('Already restreaming to Facebook');
+
+  const hlsSource = path.join(HLS_DIR, name, 'v1', 'index.m3u8');
+  const rtmpUrl = `rtmps://live-api-s.facebook.com:443/rtmp/${streamKey}`;
+
+  const args = [
+    '-loglevel', 'warning',
+    '-re',
+    '-i', hlsSource,
+    '-c:v', 'copy',
+    '-c:a', 'aac', '-b:a', '128k',
+    '-f', 'flv',
+    rtmpUrl
+  ];
+
+  const proc = spawn('ffmpeg', args);
+  fbProcesses.set(id, proc);
+  db.prepare("UPDATE endpoints SET fb_status = 'live', fb_pid = ? WHERE id = ?").run(proc.pid, id);
+
+  proc.stdout?.on('data', (d) => {
+    String(d).split('\n').filter(Boolean).forEach(l => appendLog(id, `[FB-OUT] ${l}`));
+  });
+  proc.stderr?.on('data', (d) => {
+    String(d).split('\n').filter(Boolean).forEach(l => appendLog(id, `[FB-ERR] ${l}`));
+  });
+
+  proc.on('close', (code) => {
+    fbProcesses.delete(id);
+    const status = code === 0 ? 'off' : 'error';
+    db.prepare('UPDATE endpoints SET fb_status = ?, fb_pid = NULL WHERE id = ?').run(status, id);
+    appendLog(id, `[FB] Restream exited with code ${code}`);
+  });
+}
+
+export function stopFacebook(id: string): void {
+  const proc = fbProcesses.get(id);
+  if (!proc) return;
+  proc.kill('SIGTERM');
+  setTimeout(() => { if (fbProcesses.has(id)) proc.kill('SIGKILL'); }, 3000);
+}
+
+// Instagram restream processes
+const igProcesses = new Map<string, ChildProcess>();
+
+export function startInstagram(id: string, name: string, streamKey: string): void {
+  if (igProcesses.has(id)) throw new Error('Already restreaming to Instagram');
+
+  const hlsSource = path.join(HLS_DIR, name, 'v1', 'index.m3u8');
+  const rtmpUrl = `rtmps://live-upload.instagram.com:443/rtmp/${streamKey}`;
+
+  const args = [
+    '-loglevel', 'warning',
+    '-re',
+    '-i', hlsSource,
+    '-c:v', 'copy',
+    '-c:a', 'aac', '-b:a', '128k',
+    '-f', 'flv',
+    rtmpUrl
+  ];
+
+  const proc = spawn('ffmpeg', args);
+  igProcesses.set(id, proc);
+  db.prepare("UPDATE endpoints SET ig_status = 'live', ig_pid = ? WHERE id = ?").run(proc.pid, id);
+
+  proc.stdout?.on('data', (d) => {
+    String(d).split('\n').filter(Boolean).forEach(l => appendLog(id, `[IG-OUT] ${l}`));
+  });
+  proc.stderr?.on('data', (d) => {
+    String(d).split('\n').filter(Boolean).forEach(l => appendLog(id, `[IG-ERR] ${l}`));
+  });
+
+  proc.on('close', (code) => {
+    igProcesses.delete(id);
+    const status = code === 0 ? 'off' : 'error';
+    db.prepare('UPDATE endpoints SET ig_status = ?, ig_pid = NULL WHERE id = ?').run(status, id);
+    appendLog(id, `[IG] Restream exited with code ${code}`);
+  });
+}
+
+export function stopInstagram(id: string): void {
+  const proc = igProcesses.get(id);
+  if (!proc) return;
+  proc.kill('SIGTERM');
+  setTimeout(() => { if (igProcesses.has(id)) proc.kill('SIGKILL'); }, 3000);
 }

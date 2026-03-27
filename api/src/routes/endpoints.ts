@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import db from '../db';
 import { allocatePort } from '../services/portManager';
-import { startEndpoint, stopEndpoint, getLogs, startYouTube, stopYouTube } from '../services/ffmpegManager';
+import { startEndpoint, stopEndpoint, getLogs, startYouTube, stopYouTube, startFacebook, stopFacebook, startInstagram, stopInstagram } from '../services/ffmpegManager';
 
 const router = Router();
 
@@ -171,6 +171,56 @@ router.post('/:id/youtube/stop', (req, res) => {
   stopYouTube(endpoint.id);
   db.prepare("UPDATE endpoints SET yt_status = 'off', yt_pid = NULL WHERE id = ?").run(endpoint.id);
   res.json({ ok: true, yt_status: 'off' });
+});
+
+// Facebook restream
+router.post('/:id/facebook/start', (req, res) => {
+  const endpoint = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(req.params.id) as any;
+  if (!endpoint) { res.status(404).json({ error: 'Not found' }); return; }
+  const { streamKey } = req.body;
+  if (!streamKey) { res.status(400).json({ error: 'streamKey required' }); return; }
+
+  db.prepare('UPDATE endpoints SET fb_stream_key = ? WHERE id = ?').run(streamKey, endpoint.id);
+
+  try {
+    startFacebook(endpoint.id, endpoint.name, streamKey);
+    res.json({ ok: true, fb_status: 'live' });
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post('/:id/facebook/stop', (req, res) => {
+  const endpoint = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(req.params.id) as any;
+  if (!endpoint) { res.status(404).json({ error: 'Not found' }); return; }
+  stopFacebook(endpoint.id);
+  db.prepare("UPDATE endpoints SET fb_status = 'off', fb_pid = NULL WHERE id = ?").run(endpoint.id);
+  res.json({ ok: true, fb_status: 'off' });
+});
+
+// Instagram restream
+router.post('/:id/instagram/start', (req, res) => {
+  const endpoint = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(req.params.id) as any;
+  if (!endpoint) { res.status(404).json({ error: 'Not found' }); return; }
+  const { streamKey } = req.body;
+  if (!streamKey) { res.status(400).json({ error: 'streamKey required' }); return; }
+
+  db.prepare('UPDATE endpoints SET ig_stream_key = ? WHERE id = ?').run(streamKey, endpoint.id);
+
+  try {
+    startInstagram(endpoint.id, endpoint.name, streamKey);
+    res.json({ ok: true, ig_status: 'live' });
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.post('/:id/instagram/stop', (req, res) => {
+  const endpoint = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(req.params.id) as any;
+  if (!endpoint) { res.status(404).json({ error: 'Not found' }); return; }
+  stopInstagram(endpoint.id);
+  db.prepare("UPDATE endpoints SET ig_status = 'off', ig_pid = NULL WHERE id = ?").run(endpoint.id);
+  res.json({ ok: true, ig_status: 'off' });
 });
 
 // M3U playlist for VLC/IPTV players (no auth, URL is unguessable via name)

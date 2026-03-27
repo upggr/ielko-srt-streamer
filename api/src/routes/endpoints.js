@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { addPath, removePath, getPathStatus } = require('../services/mediamtxClient');
-const { getLogs, startYouTube, stopYouTube } = require('../services/ffmpegManager');
+const { getLogs, startYouTube, stopYouTube, startFacebook, stopFacebook, startInstagram, stopInstagram } = require('../services/ffmpegManager');
 
 const router = Router();
 const SERVER_IP = process.env.SERVER_IP || '88.198.184.233';
@@ -150,6 +150,42 @@ router.post('/:id/youtube/stop', (req, res) => {
   stopYouTube(ep.id);
   db.prepare("UPDATE endpoints SET yt_status='off', yt_pid=NULL WHERE id=?").run(ep.id);
   res.json({ ok: true, yt_status: 'off' });
+});
+
+router.post('/:id/facebook/start', (req, res) => {
+  const ep = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(req.params.id);
+  if (!ep) { res.status(404).json({ error: 'Not found' }); return; }
+  const { streamKey } = req.body;
+  if (!streamKey) { res.status(400).json({ error: 'streamKey required' }); return; }
+  db.prepare('UPDATE endpoints SET fb_stream_key = ? WHERE id = ?').run(streamKey, ep.id);
+  try { startFacebook(ep.id, ep.name, streamKey); res.json({ ok: true, fb_status: 'live' }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.post('/:id/facebook/stop', (req, res) => {
+  const ep = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(req.params.id);
+  if (!ep) { res.status(404).json({ error: 'Not found' }); return; }
+  stopFacebook(ep.id);
+  db.prepare("UPDATE endpoints SET fb_status='off', fb_pid=NULL WHERE id=?").run(ep.id);
+  res.json({ ok: true, fb_status: 'off' });
+});
+
+router.post('/:id/instagram/start', (req, res) => {
+  const ep = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(req.params.id);
+  if (!ep) { res.status(404).json({ error: 'Not found' }); return; }
+  const { streamKey } = req.body;
+  if (!streamKey) { res.status(400).json({ error: 'streamKey required' }); return; }
+  db.prepare('UPDATE endpoints SET ig_stream_key = ? WHERE id = ?').run(streamKey, ep.id);
+  try { startInstagram(ep.id, ep.name, streamKey); res.json({ ok: true, ig_status: 'live' }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.post('/:id/instagram/stop', (req, res) => {
+  const ep = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(req.params.id);
+  if (!ep) { res.status(404).json({ error: 'Not found' }); return; }
+  stopInstagram(ep.id);
+  db.prepare("UPDATE endpoints SET ig_status='off', ig_pid=NULL WHERE id=?").run(ep.id);
+  res.json({ ok: true, ig_status: 'off' });
 });
 
 router.get('/:name/playlist.m3u', (req, res) => {

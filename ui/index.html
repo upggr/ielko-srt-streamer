@@ -697,6 +697,42 @@
   </div>
 </div>
 
+<!-- FACEBOOK MODAL -->
+<div id="fb-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:160;align-items:center;justify-content:center;">
+  <div style="background:var(--bg);border:1px solid #1877f2;box-shadow:0 0 40px rgba(24,119,242,0.2);width:96%;max-width:480px;padding:32px;">
+    <div style="font-size:12px;letter-spacing:4px;color:#1877f2;margin-bottom:24px;">// FACEBOOK RESTREAM</div>
+    <div id="fb-status-info" style="font-size:11px;color:var(--green-dim);margin-bottom:16px;letter-spacing:1px;"></div>
+    <div class="form-group">
+      <div class="field-label">FACEBOOK STREAM KEY</div>
+      <input type="text" id="fb-stream-key" placeholder="xxxx-xxxx-xxxx-xxxx" autocomplete="off">
+    </div>
+    <div style="font-size:9px;color:var(--green-dim);margin-bottom:20px;letter-spacing:1px;">Get your stream key from Facebook → Live Video → Use Stream Key</div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <button class="btn btn-sm" onclick="closeFB()">[ CANCEL ]</button>
+      <button class="btn btn-sm" id="fb-stop-btn" style="display:none;border-color:#ff6600;color:#ff6600;" onclick="stopFacebook()">[ STOP RESTREAM ]</button>
+      <button class="btn btn-sm" id="fb-start-btn" style="border-color:#1877f2;color:#1877f2;" onclick="startFacebook()">[ START RESTREAM ]</button>
+    </div>
+  </div>
+</div>
+
+<!-- INSTAGRAM MODAL -->
+<div id="ig-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:160;align-items:center;justify-content:center;">
+  <div style="background:var(--bg);border:1px solid #e1306c;box-shadow:0 0 40px rgba(225,48,108,0.2);width:96%;max-width:480px;padding:32px;">
+    <div style="font-size:12px;letter-spacing:4px;color:#e1306c;margin-bottom:24px;">// INSTAGRAM RESTREAM</div>
+    <div id="ig-status-info" style="font-size:11px;color:var(--green-dim);margin-bottom:16px;letter-spacing:1px;"></div>
+    <div class="form-group">
+      <div class="field-label">INSTAGRAM STREAM KEY</div>
+      <input type="text" id="ig-stream-key" placeholder="xxxx-xxxx-xxxx-xxxx" autocomplete="off">
+    </div>
+    <div style="font-size:9px;color:var(--green-dim);margin-bottom:20px;letter-spacing:1px;">Get your stream key from Instagram → Live → Advanced Settings → Stream Key</div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;">
+      <button class="btn btn-sm" onclick="closeIG()">[ CANCEL ]</button>
+      <button class="btn btn-sm" id="ig-stop-btn" style="display:none;border-color:#ff6600;color:#ff6600;" onclick="stopInstagram()">[ STOP RESTREAM ]</button>
+      <button class="btn btn-sm" id="ig-start-btn" style="border-color:#e1306c;color:#e1306c;" onclick="startInstagram()">[ START RESTREAM ]</button>
+    </div>
+  </div>
+</div>
+
 <!-- ENCODER HELP (OBS / vMix SRT) -->
 <div id="encoder-help-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:165;align-items:center;justify-content:center;">
   <div style="background:var(--bg);border:1px solid var(--green);box-shadow:0 0 40px var(--green-glow);width:96%;max-width:560px;padding:28px 32px;max-height:88vh;overflow-y:auto;">
@@ -938,6 +974,8 @@
                   <button type="button" class="btn btn-sm" style="border-color:#aa44ff;color:#aa44ff;" data-action="show-urls" data-endpoint-id="${escapeHtml(ep.id)}">URLS</button>
                   <button class="btn btn-sm" style="border-color:#ffaa00;color:#ffaa00;" onclick="showDebug('${ep.id}','${esc(ep.name)}')">DEBUG</button>
                   <button class="btn btn-sm" style="border-color:#ff0000;color:#ff0000;" onclick="openYT('${ep.id}','${esc(ep.name)}','${ep.yt_status || 'off'}','${esc(ep.yt_stream_key || '')}')">YT</button>
+                  <button class="btn btn-sm" style="border-color:#1877f2;color:#1877f2;" onclick="openFB('${ep.id}','${esc(ep.name)}','${ep.fb_status || 'off'}','${esc(ep.fb_stream_key || '')}')">FB</button>
+                  <button class="btn btn-sm" style="border-color:#e1306c;color:#e1306c;" onclick="openIG('${ep.id}','${esc(ep.name)}','${ep.ig_status || 'off'}','${esc(ep.ig_stream_key || '')}')">IG</button>
                   <button class="btn btn-sm btn-danger" onclick="deleteEp('${ep.id}', '${ep.name}')">DEL</button>
                 </div>
               </td>
@@ -1318,6 +1356,82 @@
     await apiFetch(`/api/endpoints/${ytEpId}/youtube/stop`, { method: 'POST' });
     notify('YOUTUBE RESTREAM STOPPED');
     closeYT();
+    refreshAll();
+  }
+
+  // --- FACEBOOK ---
+  let fbEpId = null;
+
+  function openFB(id, name, status, key) {
+    fbEpId = id;
+    document.getElementById('fb-stream-key').value = key || '';
+    document.getElementById('fb-status-info').textContent = `ENDPOINT: ${name.toUpperCase()} — STATUS: ${status.toUpperCase()}`;
+    const isLive = status === 'live';
+    document.getElementById('fb-start-btn').style.display = isLive ? 'none' : '';
+    document.getElementById('fb-stop-btn').style.display = isLive ? '' : 'none';
+    document.getElementById('fb-overlay').style.display = 'flex';
+  }
+
+  function closeFB() {
+    document.getElementById('fb-overlay').style.display = 'none';
+    fbEpId = null;
+  }
+
+  async function startFacebook() {
+    const key = document.getElementById('fb-stream-key').value.trim();
+    if (!key) { notify('STREAM KEY REQUIRED', true); return; }
+    const r = await apiFetch(`/api/endpoints/${fbEpId}/facebook/start`, {
+      method: 'POST', body: JSON.stringify({ streamKey: key })
+    });
+    const d = await r.json();
+    if (!r.ok) { notify('FB ERROR: ' + d.error, true); return; }
+    notify('FACEBOOK RESTREAM STARTED');
+    closeFB();
+    refreshAll();
+  }
+
+  async function stopFacebook() {
+    await apiFetch(`/api/endpoints/${fbEpId}/facebook/stop`, { method: 'POST' });
+    notify('FACEBOOK RESTREAM STOPPED');
+    closeFB();
+    refreshAll();
+  }
+
+  // --- INSTAGRAM ---
+  let igEpId = null;
+
+  function openIG(id, name, status, key) {
+    igEpId = id;
+    document.getElementById('ig-stream-key').value = key || '';
+    document.getElementById('ig-status-info').textContent = `ENDPOINT: ${name.toUpperCase()} — STATUS: ${status.toUpperCase()}`;
+    const isLive = status === 'live';
+    document.getElementById('ig-start-btn').style.display = isLive ? 'none' : '';
+    document.getElementById('ig-stop-btn').style.display = isLive ? '' : 'none';
+    document.getElementById('ig-overlay').style.display = 'flex';
+  }
+
+  function closeIG() {
+    document.getElementById('ig-overlay').style.display = 'none';
+    igEpId = null;
+  }
+
+  async function startInstagram() {
+    const key = document.getElementById('ig-stream-key').value.trim();
+    if (!key) { notify('STREAM KEY REQUIRED', true); return; }
+    const r = await apiFetch(`/api/endpoints/${igEpId}/instagram/start`, {
+      method: 'POST', body: JSON.stringify({ streamKey: key })
+    });
+    const d = await r.json();
+    if (!r.ok) { notify('IG ERROR: ' + d.error, true); return; }
+    notify('INSTAGRAM RESTREAM STARTED');
+    closeIG();
+    refreshAll();
+  }
+
+  async function stopInstagram() {
+    await apiFetch(`/api/endpoints/${igEpId}/instagram/stop`, { method: 'POST' });
+    notify('INSTAGRAM RESTREAM STOPPED');
+    closeIG();
     refreshAll();
   }
 

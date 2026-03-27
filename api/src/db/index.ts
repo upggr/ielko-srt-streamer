@@ -26,6 +26,12 @@ db.exec(`
     yt_stream_key TEXT,
     yt_status   TEXT NOT NULL DEFAULT 'off',
     yt_pid      INTEGER,
+    fb_stream_key TEXT,
+    fb_status   TEXT NOT NULL DEFAULT 'off',
+    fb_pid      INTEGER,
+    ig_stream_key TEXT,
+    ig_status   TEXT NOT NULL DEFAULT 'off',
+    ig_pid      INTEGER,
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
@@ -36,5 +42,14 @@ db.exec(`
     expires_at  TEXT NOT NULL
   );
 `);
+
+// Migrations: add columns if they don't exist (safe to run multiple times)
+const existingCols = (db.prepare("PRAGMA table_info(endpoints)").all() as any[]).map(c => c.name);
+if (!existingCols.includes('fb_stream_key')) db.exec("ALTER TABLE endpoints ADD COLUMN fb_stream_key TEXT");
+if (!existingCols.includes('fb_status'))     db.exec("ALTER TABLE endpoints ADD COLUMN fb_status TEXT NOT NULL DEFAULT 'off'");
+if (!existingCols.includes('fb_pid'))        db.exec("ALTER TABLE endpoints ADD COLUMN fb_pid INTEGER");
+if (!existingCols.includes('ig_stream_key')) db.exec("ALTER TABLE endpoints ADD COLUMN ig_stream_key TEXT");
+if (!existingCols.includes('ig_status'))     db.exec("ALTER TABLE endpoints ADD COLUMN ig_status TEXT NOT NULL DEFAULT 'off'");
+if (!existingCols.includes('ig_pid'))        db.exec("ALTER TABLE endpoints ADD COLUMN ig_pid INTEGER");
 
 export default db;
