@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { addPath, removePath, getPathStatus } = require('../services/mediamtxClient');
 const { getLogs, startYouTube, stopYouTube, startFacebook, stopFacebook, startInstagram, stopInstagram, startTranscode, stopTranscode } = require('../services/ffmpegManager');
+const { getState: getLicenseState } = require('../services/licenseGuard');
 
 const router = Router();
 const SERVER_IP = process.env.SERVER_IP || '88.198.184.233';
@@ -47,6 +48,18 @@ router.get('/', (req, res) => {
 });
 
 router.post('/', async (req, res) => {
+  const lic = getLicenseState();
+  const maxEndpoints =
+    typeof lic.streams === 'number' && lic.streams > 0 ? lic.streams : 1;
+  const { c: endpointCount } = db.prepare('SELECT COUNT(*) AS c FROM endpoints').get();
+  if (endpointCount >= maxEndpoints) {
+    return res.status(403).json({
+      error: `Endpoint limit reached (${maxEndpoints} for your plan). Delete an endpoint or upgrade.`,
+      limit: maxEndpoints,
+      plan: lic.plan || null,
+    });
+  }
+
   const { name, protocol, sourceMode, sourceUrl } = req.body;
   if (!name || !protocol) { res.status(400).json({ error: 'name and protocol required' }); return; }
   if (!['srt', 'mpegts', 'udp', 'rtmp', 'rtsp', 'hls'].includes(protocol)) {
