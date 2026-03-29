@@ -23,12 +23,12 @@ else
   echo "[1/5] Docker already installed"
 fi
 
-# 2. Install git
-if ! command -v git &>/dev/null; then
-  echo "[2/5] Installing git..."
-  apt-get update -qq && apt-get install -y -qq git
+# 2. Install git and speedtest-cli
+if ! command -v git &>/dev/null || ! command -v speedtest-cli &>/dev/null; then
+  echo "[2/5] Installing git + speedtest-cli..."
+  apt-get update -qq && apt-get install -y -qq git speedtest-cli
 else
-  echo "[2/5] git already installed"
+  echo "[2/5] git + speedtest-cli already installed"
 fi
 
 # 3. Clone repo
@@ -61,7 +61,11 @@ chmod +x "$INSTALL_DIR/update-watcher.sh"
 cat > /etc/cron.d/srt-streamer <<EOF
 * * * * * root $INSTALL_DIR/update-watcher.sh >> /var/log/srt-updater.log 2>&1
 * * * * * root sleep 30 && $INSTALL_DIR/update-watcher.sh >> /var/log/srt-updater.log 2>&1
+0 2 * * * root speedtest-cli --json > $INSTALL_DIR/.speedtest.json 2>/dev/null
 EOF
+
+# Run initial speedtest in background (non-blocking)
+speedtest-cli --json > "$INSTALL_DIR/.speedtest.json" 2>/dev/null &
 
 echo ""
 echo "=== Install complete ==="

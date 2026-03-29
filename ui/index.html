@@ -632,6 +632,21 @@
       <div class="stat-label">License</div>
       <div class="stat-value small" id="stat-license" style="color:#555;">CHECKING</div>
     </div>
+    <div class="stat-card" id="bw-card" style="grid-column:span 2;" title="Upload bandwidth capacity — based on nightly speedtest">
+      <div class="stat-label">Bandwidth Capacity</div>
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
+        <div class="stat-value small" id="stat-viewers" style="color:var(--green);">-- viewers</div>
+        <div style="font-size:9px;color:var(--green-dim);letter-spacing:1px;" id="stat-capacity-text">/ -- max est.</div>
+      </div>
+      <div style="margin-top:8px;height:6px;background:#111;border:1px solid var(--border);border-radius:2px;overflow:hidden;">
+        <div id="bw-bar" style="height:100%;width:0%;background:var(--green);transition:width 0.6s;border-radius:2px;"></div>
+      </div>
+      <div style="margin-top:6px;font-size:9px;color:var(--green-dim);letter-spacing:1px;display:flex;gap:16px;flex-wrap:wrap;">
+        <span>↑ <span id="stat-upload">--</span></span>
+        <span>↓ <span id="stat-download">--</span></span>
+        <span id="stat-speedtest-age" style="opacity:0.6;"></span>
+      </div>
+    </div>
   </div>
 
   <!-- LICENSE BANNER (shown when invalid) -->
@@ -977,7 +992,7 @@
   }
 
   async function refreshAll() {
-    await Promise.all([refreshStats(), refreshEndpoints(), refreshLicense()]);
+    await Promise.all([refreshStats(), refreshEndpoints(), refreshLicense(), refreshBandwidth()]);
     updateBitrateBadges();
   }
 
@@ -1069,6 +1084,40 @@
       document.getElementById('stat-cpu').textContent = d.system.cpuLoad || '--';
       document.getElementById('stat-mem').textContent = d.system.memFree || '--';
       document.getElementById('sys-uptime').textContent = 'UPTIME: ' + (d.system.uptime || '--');
+    } catch {}
+  }
+
+  function fmtBps(bps) {
+    if (bps == null) return '--';
+    if (bps >= 1e9) return (bps / 1e9).toFixed(1) + ' Gbps';
+    if (bps >= 1e6) return (bps / 1e6).toFixed(0) + ' Mbps';
+    return (bps / 1e3).toFixed(0) + ' Kbps';
+  }
+
+  async function refreshBandwidth() {
+    try {
+      const r = await apiFetch('/api/stats/bandwidth');
+      if (!r.ok) return;
+      const d = await r.json();
+
+      document.getElementById('stat-upload').textContent = fmtBps(d.uploadBps);
+      document.getElementById('stat-download').textContent = fmtBps(d.downloadBps);
+      document.getElementById('stat-viewers').textContent = d.viewers + ' viewer' + (d.viewers !== 1 ? 's' : '');
+
+      if (d.capacityViewers != null) {
+        document.getElementById('stat-capacity-text').textContent = `/ ~${d.capacityViewers} max est. (@4 Mbps/viewer)`;
+        const pct = d.capacityViewers > 0 ? Math.min(100, Math.round((d.viewers / d.capacityViewers) * 100)) : 0;
+        const bar = document.getElementById('bw-bar');
+        bar.style.width = pct + '%';
+        bar.style.background = pct > 80 ? '#ff4444' : pct > 50 ? '#ffaa00' : 'var(--green)';
+      }
+
+      if (d.speedtestAt) {
+        const age = Math.round((Date.now() - new Date(d.speedtestAt).getTime()) / 3600000);
+        document.getElementById('stat-speedtest-age').textContent = age < 1 ? 'speedtest: just now' : `speedtest: ${age}h ago`;
+      } else {
+        document.getElementById('stat-speedtest-age').textContent = 'no speedtest yet';
+      }
     } catch {}
   }
 
