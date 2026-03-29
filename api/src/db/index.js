@@ -31,6 +31,8 @@ db.exec(`
     ig_stream_key TEXT,
     ig_status    TEXT NOT NULL DEFAULT 'off',
     ig_pid       INTEGER,
+    transcode_enabled INTEGER NOT NULL DEFAULT 0,
+    transcode_pid INTEGER,
     created_at   TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
   );
@@ -47,8 +49,10 @@ const existingCols = db.prepare("PRAGMA table_info(endpoints)").all().map(c => c
 if (!existingCols.includes('fb_stream_key')) db.exec("ALTER TABLE endpoints ADD COLUMN fb_stream_key TEXT");
 if (!existingCols.includes('fb_status'))     db.exec("ALTER TABLE endpoints ADD COLUMN fb_status TEXT NOT NULL DEFAULT 'off'");
 if (!existingCols.includes('fb_pid'))        db.exec("ALTER TABLE endpoints ADD COLUMN fb_pid INTEGER");
-if (!existingCols.includes('ig_stream_key')) db.exec("ALTER TABLE endpoints ADD COLUMN ig_stream_key TEXT");
-if (!existingCols.includes('ig_status'))     db.exec("ALTER TABLE endpoints ADD COLUMN ig_status TEXT NOT NULL DEFAULT 'off'");
-if (!existingCols.includes('ig_pid'))        db.exec("ALTER TABLE endpoints ADD COLUMN ig_pid INTEGER");
+if (!existingCols.includes('ig_stream_key'))    db.exec("ALTER TABLE endpoints ADD COLUMN ig_stream_key TEXT");
+if (!existingCols.includes('ig_status'))        db.exec("ALTER TABLE endpoints ADD COLUMN ig_status TEXT NOT NULL DEFAULT 'off'");
+if (!existingCols.includes('ig_pid'))           db.exec("ALTER TABLE endpoints ADD COLUMN ig_pid INTEGER");
+if (!existingCols.includes('transcode_enabled')) db.exec("ALTER TABLE endpoints ADD COLUMN transcode_enabled INTEGER NOT NULL DEFAULT 0");
+if (!existingCols.includes('transcode_pid'))     db.exec("ALTER TABLE endpoints ADD COLUMN transcode_pid INTEGER");
 
 module.exports = db;

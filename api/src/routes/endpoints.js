@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { addPath, removePath, getPathStatus } = require('../services/mediamtxClient');
-const { getLogs, startYouTube, stopYouTube, startFacebook, stopFacebook, startInstagram, stopInstagram } = require('../services/ffmpegManager');
+const { getLogs, startYouTube, stopYouTube, startFacebook, stopFacebook, startInstagram, stopInstagram, startTranscode, stopTranscode } = require('../services/ffmpegManager');
 
 const router = Router();
 const SERVER_IP = process.env.SERVER_IP || '88.198.184.233';
@@ -12,28 +12,26 @@ const PUBLIC_URL = process.env.PUBLIC_URL || 'https://streams.ioniantv.gr';
 const SRT_PORT = 8890;
 const RTMP_PORT = 1935;
 
-function buildUrls(protocol, name, srtPassword) {
+function buildUrls(protocol, name, srtPassword, transcodeEnabled) {
   let senderUrl;
   if (protocol === 'srt') {
-    // mediamtx uses streamid for path routing. No SRT crypto passphrase — access control is via streamid token.
     senderUrl = `srt://${SERVER_IP}:${SRT_PORT}?streamid=publish:${name}&latency=200`;
-  } else if (protocol === 'mpegts' || protocol === 'udp') {
-    senderUrl = `rtmp://${SERVER_IP}:${RTMP_PORT}/${name}`;
   } else {
     senderUrl = `rtmp://${SERVER_IP}:${RTMP_PORT}/${name}`;
   }
 
   const hlsBase = `${PUBLIC_URL}/hls/${name}`;
   const whepUrl = `${PUBLIC_URL}/whep/${name}/whep`;
+  const abr = !!transcodeEnabled;
 
   return {
     senderUrl,
     viewerUrl: `${PUBLIC_URL}/watch/${name}`,
-    hlsUrl: `${hlsBase}/index.m3u8`,
-    hlsSourceUrl: `${hlsBase}/index.m3u8`,   // mediamtx serves single adaptive HLS
-    hls720pUrl: null,
-    hls480pUrl: null,
-    hls360pUrl: null,
+    hlsUrl: abr ? `${hlsBase}/master.m3u8` : `${hlsBase}/index.m3u8`,
+    hlsSourceUrl: `${hlsBase}/index.m3u8`,
+    hls720pUrl: abr ? `${hlsBase}/v0/index.m3u8` : null,
+    hls480pUrl: abr ? `${hlsBase}/v1/index.m3u8` : null,
+    hls360pUrl: abr ? `${hlsBase}/v2/index.m3u8` : null,
     webrtcUrl: whepUrl,
     m3uUrl: `${PUBLIC_URL}/api/endpoints/${name}/playlist.m3u`,
     srtPullUrl: protocol === 'srt' ? `srt://${SERVER_IP}:${SRT_PORT}?streamid=read:${name}&latency=200` : null,
@@ -45,7 +43,7 @@ function buildUrls(protocol, name, srtPassword) {
 
 router.get('/', (req, res) => {
   const rows = db.prepare('SELECT * FROM endpoints ORDER BY created_at DESC').all();
-  res.json(rows.map(r => ({ ...r, ...buildUrls(r.protocol, r.name, r.srt_password) })));
+  res.json(rows.map(r => ({ ...r, ...buildUrls(r.protocol, r.name, r.srt_password, r.transcode_enabled) })));
 });
 
 router.post('/', async (req, res) => {
@@ -186,6 +184,20 @@ router.post('/:id/instagram/stop', (req, res) => {
   stopInstagram(ep.id);
   db.prepare("UPDATE endpoints SET ig_status='off', ig_pid=NULL WHERE id=?").run(ep.id);
   res.json({ ok: true, ig_status: 'off' });
+});
+
+router.post('/:id/transcode/start', (req, res) => {
+  const ep = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(req.params.id);
+  if (!ep) { res.status(404).json({ error: 'Not found' }); return; }
+  try { startTranscode(ep.id, ep.name); res.json({ ok: true, transcode_enabled: 1 }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.post('/:id/transcode/stop', (req, res) => {
+  const ep = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(req.params.id);
+  if (!ep) { res.status(404).json({ error: 'Not found' }); return; }
+  stopTranscode(ep.id, ep.name);
+  res.json({ ok: true, transcode_enabled: 0 });
 });
 
 router.get('/:name/playlist.m3u', (req, res) => {

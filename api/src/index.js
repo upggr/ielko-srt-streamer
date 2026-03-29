@@ -22,12 +22,23 @@ app.use('/api/auth', authRouter);
 app.use('/api/endpoints', requireAuth, endpointsRouter);
 app.use('/api/stats', requireAuth, statsRouter);
 
-// Proxy HLS from mediamtx — strip /hls prefix before forwarding
-app.use('/hls', createProxyMiddleware({
-  target: `${MEDIAMTX}:8888`,
-  changeOrigin: true,
-  pathRewrite: { '^/hls': '' },
-}));
+// Proxy HLS: ABR (master.m3u8 / v0..v2) served from nginx, passthrough from mediamtx
+app.use('/hls', (req, res, next) => {
+  // If requesting ABR master or rendition segments, route to hls-nginx
+  if (/\/(master\.m3u8|v\d\/)/.test(req.path)) {
+    return createProxyMiddleware({
+      target: 'http://hls-nginx:8080',
+      changeOrigin: true,
+      pathRewrite: { '^/hls': '' },
+    })(req, res, next);
+  }
+  // Otherwise passthrough to mediamtx
+  return createProxyMiddleware({
+    target: `${MEDIAMTX}:8888`,
+    changeOrigin: true,
+    pathRewrite: { '^/hls': '' },
+  })(req, res, next);
+});
 
 // Proxy WebRTC/WHEP from mediamtx — strip /whep prefix before forwarding
 app.use('/whep', createProxyMiddleware({

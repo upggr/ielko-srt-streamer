@@ -1,8 +1,11 @@
 'use strict';
 const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 const db = require('../db');
 
 const MEDIAMTX_HLS = process.env.MEDIAMTX_HLS || 'http://mediamtx:8888';
+const HLS_DIR = process.env.HLS_DIR || '/hls';
 
 const ytProcesses = new Map();
 const ytStopping = new Set(); // IDs explicitly stopped — no restart
@@ -148,4 +151,96 @@ function stopYouTube(id) {
   }, 3000);
 }
 
-module.exports = { getLogs, startYouTube, stopYouTube, startFacebook, stopFacebook, startInstagram, stopInstagram };
+// --- Adaptive Bitrate Transcoding ---
+const transcodeProcesses = new Map();
+const transcodeStopping = new Set();
+
+function startTranscode(id, name) {
+  if (transcodeProcesses.has(id)) throw new Error('Transcode already running');
+  transcodeStopping.delete(id);
+
+  const outDir = path.join(HLS_DIR, name);
+  fs.mkdirSync(outDir, { recursive: true });
+
+  const inputUrl = `${MEDIAMTX_HLS}/${name}/index.m3u8`;
+
+  // filter_complex: split source into 3 scaled renditions
+  const filterComplex = [
+    '[0:v]split=3[v720][v480][v360]',
+    '[v720]scale=-2:720[out720]',
+    '[v480]scale=-2:480[out480]',
+    '[v360]scale=-2:360[out360]',
+  ].join(';');
+
+  const args = [
+    '-loglevel', 'warning',
+    '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5',
+    '-i', inputUrl,
+    '-filter_complex', filterComplex,
+    // 720p
+    '-map', '[out720]', '-map', '0:a',
+    '-c:v:0', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-b:v:0', '2500k', '-maxrate:v:0', '2700k', '-bufsize:v:0', '5000k',
+    '-c:a:0', 'aac', '-b:a:0', '128k',
+    // 480p
+    '-map', '[out480]', '-map', '0:a',
+    '-c:v:1', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-b:v:1', '1200k', '-maxrate:v:1', '1300k', '-bufsize:v:1', '2400k',
+    '-c:a:1', 'aac', '-b:a:1', '96k',
+    // 360p
+    '-map', '[out360]', '-map', '0:a',
+    '-c:v:2', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-b:v:2', '600k', '-maxrate:v:2', '700k', '-bufsize:v:2', '1200k',
+    '-c:a:2', 'aac', '-b:a:2', '64k',
+    // HLS output
+    '-f', 'hls',
+    '-hls_time', '2',
+    '-hls_list_size', '6',
+    '-hls_flags', 'delete_segments+independent_segments',
+    '-hls_segment_type', 'mpegts',
+    '-hls_segment_filename', `${outDir}/v%v/seg%03d.ts`,
+    '-master_pl_name', 'master.m3u8',
+    '-var_stream_map', 'v:0,a:0 v:1,a:1 v:2,a:2',
+    `${outDir}/v%v/index.m3u8`,
+  ];
+
+  const proc = spawn('ffmpeg', args);
+  transcodeProcesses.set(id, proc);
+  db.prepare("UPDATE endpoints SET transcode_enabled=1, transcode_pid=? WHERE id=?").run(proc.pid, id);
+
+  proc.stdout.on('data', d => String(d).split('\n').filter(Boolean).forEach(l => appendLog(id, `[ABR] ${l}`)));
+  proc.stderr.on('data', d => String(d).split('\n').filter(Boolean).forEach(l => appendLog(id, `[ABR-ERR] ${l}`)));
+
+  proc.on('close', code => {
+    transcodeProcesses.delete(id);
+    appendLog(id, `[ABR] ffmpeg exited with code ${code}`);
+    if (transcodeStopping.has(id)) {
+      transcodeStopping.delete(id);
+      db.prepare("UPDATE endpoints SET transcode_pid=NULL WHERE id=?").run(id);
+      return;
+    }
+    // Auto-restart on unexpected exit (stream reconnect)
+    db.prepare("UPDATE endpoints SET transcode_pid=NULL WHERE id=?").run(id);
+    if (db.prepare('SELECT transcode_enabled FROM endpoints WHERE id=?').get(id)?.transcode_enabled) {
+      appendLog(id, '[ABR] WATCHDOG: restarting transcode in 5s');
+      setTimeout(() => {
+        const ep = db.prepare('SELECT * FROM endpoints WHERE id=?').get(id);
+        if (ep && ep.transcode_enabled) startTranscode(id, name);
+      }, 5000);
+    }
+  });
+}
+
+function stopTranscode(id, name) {
+  const proc = transcodeProcesses.get(id);
+  transcodeStopping.add(id);
+  if (proc) {
+    proc.kill('SIGTERM');
+    setTimeout(() => { if (transcodeProcesses.has(id)) transcodeProcesses.get(id).kill('SIGKILL'); }, 3000);
+  }
+  db.prepare("UPDATE endpoints SET transcode_enabled=0, transcode_pid=NULL WHERE id=?").run(id);
+  // Clean up HLS segments
+  if (name) {
+    const outDir = path.join(HLS_DIR, name);
+    try { fs.rmSync(outDir, { recursive: true, force: true }); } catch {}
+  }
+}
+
+module.exports = { getLogs, startYouTube, stopYouTube, startFacebook, stopFacebook, startInstagram, stopInstagram, startTranscode, stopTranscode };

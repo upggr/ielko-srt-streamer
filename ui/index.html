@@ -970,6 +970,7 @@
               </td>
               <td>
                 <div class="actions">
+                  <button class="btn btn-sm" style="${ep.transcode_enabled ? 'border-color:#00ff41;color:#00ff41;' : 'border-color:#555;color:#555;'}" onclick="toggleTranscode('${ep.id}','${ep.name}',${ep.transcode_enabled ? 1 : 0})" title="Adaptive Bitrate Transcoding (720p/480p/360p)">ABR${ep.transcode_enabled ? ' ●' : ''}</button>
                   <button class="btn btn-sm" style="border-color:#2196F3;color:#2196F3;" onclick="copyTelegram('${esc(ep.name)}','${esc(ep.viewerUrl)}')">✈ TG</button>
                   <button type="button" class="btn btn-sm" style="border-color:#aa44ff;color:#aa44ff;" data-action="show-urls" data-endpoint-id="${escapeHtml(ep.id)}">URLS</button>
                   <button class="btn btn-sm" style="border-color:#ffaa00;color:#ffaa00;" onclick="showDebug('${ep.id}','${esc(ep.name)}')">DEBUG</button>
@@ -1435,12 +1436,28 @@
     refreshAll();
   }
 
+  // --- TRANSCODE (ABR) ---
+  async function toggleTranscode(id, name, currentState) {
+    if (currentState) {
+      await apiFetch(`/api/endpoints/${id}/transcode/stop`, { method: 'POST' });
+      notify('ABR TRANSCODING STOPPED');
+    } else {
+      const r = await apiFetch(`/api/endpoints/${id}/transcode/start`, { method: 'POST' });
+      if (!r.ok) { const d = await r.json(); notify('ABR ERROR: ' + d.error, true); return; }
+      notify('ABR TRANSCODING STARTED — 720p / 480p / 360p');
+    }
+    refreshAll();
+  }
+
   // --- URLs MODAL ---
   function showURLs(ep) {
     document.getElementById('urls-title').textContent = `// OUTPUT URLs: ${ep.name.toUpperCase()}`;
     const urlDefs = [
       ep.webrtcUrl ? { label: 'WebRTC / WHEP', desc: 'Ultra-low latency (<1s) · Browser native · No plugin', value: ep.webrtcUrl, tag: 'RTC' } : null,
-      { label: 'HLS (adaptive)', desc: 'All browsers via HLS.js · Safari native', value: ep.hlsUrl, tag: 'HLS' },
+      ep.transcode_enabled ? { label: 'HLS MASTER (ABR)', desc: '720p / 480p / 360p adaptive · All browsers', value: ep.hlsUrl, tag: 'HLS' } : { label: 'HLS (passthrough)', desc: 'Source quality · All browsers via HLS.js', value: ep.hlsUrl, tag: 'HLS' },
+      ep.transcode_enabled && ep.hls720pUrl ? { label: 'HLS 720p', desc: '2.5 Mbps · HD', value: ep.hls720pUrl, tag: 'HLS' } : null,
+      ep.transcode_enabled && ep.hls480pUrl ? { label: 'HLS 480p', desc: '1.2 Mbps · SD', value: ep.hls480pUrl, tag: 'HLS' } : null,
+      ep.transcode_enabled && ep.hls360pUrl ? { label: 'HLS 360p', desc: '0.6 Mbps · Low bandwidth', value: ep.hls360pUrl, tag: 'HLS' } : null,
       { label: 'M3U PLAYLIST', desc: 'VLC · IPTV players · Kodi · TV apps', value: ep.m3uUrl, tag: 'M3U' },
       { label: 'EMBED (iframe)', desc: 'Copy & paste into any website', value: ep.embedUrl, tag: 'WEB', isEmbed: true },
       { label: 'BROWSER VIEWER', desc: 'Full screen web player', value: ep.viewerUrl, tag: 'WEB' },
