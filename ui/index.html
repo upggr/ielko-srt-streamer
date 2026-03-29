@@ -680,14 +680,15 @@
       <div>VERSION: <span id="cfg-version" style="color:var(--green);">--</span></div>
     </div>
 
-    <!-- Update section -->
-    <div id="update-section" style="display:none;margin-bottom:24px;">
+    <!-- Update section — always visible -->
+    <div id="update-section" style="margin-bottom:24px;">
       <div style="font-size:10px;color:var(--green-dim);margin-bottom:12px;letter-spacing:2px;border-bottom:1px solid var(--border);padding-bottom:8px;">SOFTWARE UPDATE</div>
-      <div style="padding:12px;border:1px solid #ffaa00;background:rgba(255,170,0,0.05);font-size:10px;color:#ffaa00;line-height:1.8;margin-bottom:12px;">
-        <div>Current: <span id="upd-current" style="color:#fff;"></span></div>
-        <div>Latest:&nbsp; <span id="upd-latest" style="color:#fff;"></span></div>
+      <div id="upd-info" style="padding:12px;border:1px solid var(--border);background:rgba(0,255,65,0.03);font-size:10px;color:var(--green-dim);line-height:1.8;margin-bottom:12px;">
+        <div>Current: <span id="upd-current" style="color:var(--green);">--</span></div>
+        <div>Latest:&nbsp; <span id="upd-latest" style="color:var(--green);">--</span></div>
+        <div id="upd-status" style="margin-top:4px;"></div>
       </div>
-      <button class="btn btn-sm" id="upd-btn" style="border-color:#ffaa00;color:#ffaa00;" onclick="runUpdate()">[ APPLY UPDATE ]</button>
+      <button class="btn btn-sm" id="upd-btn" onclick="runUpdate()">[ CHECK &amp; UPDATE ]</button>
       <div id="upd-log" style="display:none;margin-top:12px;padding:10px;background:#000;font-size:10px;color:var(--green-dim);font-family:monospace;border:1px solid var(--border);line-height:1.6;"></div>
     </div>
 
@@ -1673,13 +1674,34 @@
       const lic = getLicenseState();
       document.getElementById('cfg-license').textContent = lic.valid ? `${lic.plan || 'valid'} · ${lic.streams} stream(s)` : 'INVALID';
       document.getElementById('cfg-version').textContent = lic.currentVersion || 'dev';
-      const updateSection = document.getElementById('update-section');
-      if (lic.updateAvailable && lic.latestVersion) {
-        document.getElementById('upd-current').textContent = lic.currentVersion || 'dev';
-        document.getElementById('upd-latest').textContent = lic.latestVersion;
-        updateSection.style.display = 'block';
+      document.getElementById('upd-current').textContent = lic.currentVersion || 'dev';
+      const updLatestEl = document.getElementById('upd-latest');
+      const updStatusEl = document.getElementById('upd-status');
+      const updInfoEl   = document.getElementById('upd-info');
+      const updBtn      = document.getElementById('upd-btn');
+      if (lic.latestVersion) {
+        updLatestEl.textContent = lic.latestVersion;
+        if (lic.updateAvailable) {
+          updInfoEl.style.borderColor = '#ffaa00';
+          updInfoEl.style.background  = 'rgba(255,170,0,0.05)';
+          updStatusEl.innerHTML = '<span style="color:#ffaa00;letter-spacing:1px;">↑ UPDATE AVAILABLE</span>';
+          updBtn.style.borderColor = '#ffaa00';
+          updBtn.style.color = '#ffaa00';
+          updBtn.textContent = '[ APPLY UPDATE ]';
+        } else {
+          updInfoEl.style.borderColor = 'var(--border)';
+          updInfoEl.style.background  = 'rgba(0,255,65,0.03)';
+          updStatusEl.innerHTML = '<span style="color:var(--green-dim);letter-spacing:1px;">✓ UP TO DATE</span>';
+          updBtn.style.borderColor = '';
+          updBtn.style.color = '';
+          updBtn.textContent = '[ FORCE UPDATE ]';
+        }
       } else {
-        updateSection.style.display = 'none';
+        updLatestEl.textContent = 'unknown (set in admin)';
+        updStatusEl.textContent = '';
+        updBtn.style.borderColor = '';
+        updBtn.style.color = '';
+        updBtn.textContent = '[ FORCE UPDATE ]';
       }
     } catch {}
   }
@@ -1687,23 +1709,30 @@
   async function runUpdate() {
     const btn = document.getElementById('upd-btn');
     const log = document.getElementById('upd-log');
+    const originalText = btn.textContent;
     btn.disabled = true;
     btn.textContent = '[ UPDATING... ]';
     log.style.display = 'block';
     log.textContent = 'Sending update request...';
     try {
-      const r = await apiFetch('/api/update', { method: 'POST' });
+      // Try normal update first; if no update available, use the license trigger endpoint
+      // which forces a version re-check and then writes the flag if an update is found.
+      let r = await apiFetch('/api/update', { method: 'POST' });
+      if (!r.ok && r.status === 400) {
+        // No update available according to local state — try forcing via license trigger
+        r = await apiFetch('/api/license/trigger-update', { method: 'POST' });
+      }
       const d = await r.json();
       if (!r.ok) {
         log.textContent = 'ERROR: ' + (d.error || r.status);
-        btn.disabled = false; btn.textContent = '[ APPLY UPDATE ]';
+        btn.disabled = false; btn.textContent = originalText;
         return;
       }
-      log.textContent = d.message + '\n\nThe container will restart automatically within ~30 seconds.\nThis page will reload.';
+      log.textContent = (d.message || 'Update scheduled.') + '\n\nThe container will restart automatically within ~30 seconds.\nThis page will reload.';
       setTimeout(() => location.reload(), 35000);
     } catch (e) {
       log.textContent = 'Error: ' + e.message;
-      btn.disabled = false; btn.textContent = '[ APPLY UPDATE ]';
+      btn.disabled = false; btn.textContent = originalText;
     }
   }
 
