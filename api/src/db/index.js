@@ -33,6 +33,12 @@ db.exec(`
     ig_pid       INTEGER,
     transcode_enabled INTEGER NOT NULL DEFAULT 0,
     transcode_pid INTEGER,
+    source_mode   TEXT NOT NULL DEFAULT 'push',
+    source_url    TEXT,
+    icecast_url      TEXT,
+    icecast_mount    TEXT,
+    icecast_user     TEXT,
+    icecast_password TEXT,
     created_at   TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
   );
@@ -52,7 +58,13 @@ if (!existingCols.includes('fb_pid'))        db.exec("ALTER TABLE endpoints ADD 
 if (!existingCols.includes('ig_stream_key'))    db.exec("ALTER TABLE endpoints ADD COLUMN ig_stream_key TEXT");
 if (!existingCols.includes('ig_status'))        db.exec("ALTER TABLE endpoints ADD COLUMN ig_status TEXT NOT NULL DEFAULT 'off'");
 if (!existingCols.includes('ig_pid'))           db.exec("ALTER TABLE endpoints ADD COLUMN ig_pid INTEGER");
-if (!existingCols.includes('transcode_enabled')) db.exec("ALTER TABLE endpoints ADD COLUMN transcode_enabled INTEGER NOT NULL DEFAULT 0");
-if (!existingCols.includes('transcode_pid'))     db.exec("ALTER TABLE endpoints ADD COLUMN transcode_pid INTEGER");
+if (!existingCols.includes('transcode_enabled'))  db.exec("ALTER TABLE endpoints ADD COLUMN transcode_enabled INTEGER NOT NULL DEFAULT 0");
+if (!existingCols.includes('transcode_pid'))      db.exec("ALTER TABLE endpoints ADD COLUMN transcode_pid INTEGER");
+if (!existingCols.includes('source_mode'))        db.exec("ALTER TABLE endpoints ADD COLUMN source_mode TEXT NOT NULL DEFAULT 'push'");
+if (!existingCols.includes('source_url'))         db.exec("ALTER TABLE endpoints ADD COLUMN source_url TEXT");
+if (!existingCols.includes('icecast_url'))        db.exec("ALTER TABLE endpoints ADD COLUMN icecast_url TEXT");
+if (!existingCols.includes('icecast_mount'))      db.exec("ALTER TABLE endpoints ADD COLUMN icecast_mount TEXT");
+if (!existingCols.includes('icecast_user'))       db.exec("ALTER TABLE endpoints ADD COLUMN icecast_user TEXT");
+if (!existingCols.includes('icecast_password'))   db.exec("ALTER TABLE endpoints ADD COLUMN icecast_password TEXT");
 
 module.exports = db;

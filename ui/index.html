@@ -767,12 +767,27 @@
     </div>
 
     <div class="form-group">
+      <div class="field-label">MODE</div>
+      <select id="ep-mode" onchange="onModeChange()">
+        <option value="push">PUSH — encoder sends stream to us</option>
+        <option value="pull">PULL — we fetch from an external URL</option>
+      </select>
+    </div>
+
+    <div class="form-group" id="ep-protocol-group">
       <div class="field-label">PROTOCOL</div>
       <select id="ep-protocol">
         <option value="srt">SRT — Secure Reliable Transport</option>
-        <option value="mpegts">MPEGTS — MPEG Transport Stream (UDP)</option>
+        <option value="mpegts">MPEGTS — MPEG Transport Stream</option>
         <option value="udp">UDP — Raw UDP</option>
+        <option value="rtmp">RTMP</option>
       </select>
+    </div>
+
+    <div class="form-group" id="ep-source-url-group" style="display:none;">
+      <div class="field-label">SOURCE URL</div>
+      <input type="text" id="ep-source-url" placeholder="rtmp://... or rtsp://... or srt://... or http://..." autocomplete="off">
+      <div style="font-size:9px;color:var(--green-dim);margin-top:4px;letter-spacing:1px;">Any URL mediamtx can pull: rtmp://, rtsp://, srt://, http:// (HLS), udp://</div>
     </div>
 
     <div id="created-box">
@@ -785,6 +800,65 @@
     <div class="modal-actions" id="modal-form-actions">
       <button class="btn btn-sm" onclick="closeModal()">[ CANCEL ]</button>
       <button class="btn btn-sm" onclick="createEndpoint()">[ CREATE ]</button>
+    </div>
+  </div>
+</div>
+
+<!-- PULL SOURCE MODAL -->
+<div id="pull-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:160;align-items:center;justify-content:center;">
+  <div style="background:var(--bg);border:1px solid #ffaa00;box-shadow:0 0 40px rgba(255,170,0,0.15);width:96%;max-width:500px;padding:32px;">
+    <div style="font-size:12px;letter-spacing:4px;color:#ffaa00;margin-bottom:24px;">// PULL SOURCE</div>
+    <div id="pull-status-info" style="font-size:11px;color:var(--green-dim);margin-bottom:16px;letter-spacing:1px;"></div>
+    <div class="form-group">
+      <div class="field-label">SOURCE URL</div>
+      <input type="text" id="pull-source-url" placeholder="rtmp://... rtsp://... srt://... http://..." autocomplete="off">
+      <div style="font-size:9px;color:var(--green-dim);margin-top:4px;letter-spacing:1px;">mediamtx will connect and pull this stream continuously</div>
+    </div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;flex-wrap:wrap;">
+      <button class="btn btn-sm" onclick="closePull()">[ CANCEL ]</button>
+      <button class="btn btn-sm" id="pull-disable-btn" style="display:none;border-color:#ff6600;color:#ff6600;" onclick="disablePull()">[ DISABLE PULL ]</button>
+      <button class="btn btn-sm" style="border-color:#ffaa00;color:#ffaa00;" onclick="savePull()">[ SAVE & ACTIVATE ]</button>
+    </div>
+  </div>
+</div>
+
+<!-- ICECAST MODAL -->
+<div id="icecast-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:160;align-items:center;justify-content:center;">
+  <div style="background:var(--bg);border:1px solid #00ccff;box-shadow:0 0 40px rgba(0,204,255,0.15);width:96%;max-width:520px;padding:32px;max-height:90vh;overflow-y:auto;">
+    <div style="font-size:12px;letter-spacing:4px;color:#00ccff;margin-bottom:24px;">// ICECAST METADATA</div>
+    <div id="icecast-status-info" style="font-size:11px;color:var(--green-dim);margin-bottom:16px;letter-spacing:1px;"></div>
+    <div style="font-size:10px;color:var(--green-dim);margin-bottom:16px;letter-spacing:1px;border:1px solid var(--border);padding:10px;">SERVER CONFIGURATION</div>
+    <div class="form-group">
+      <div class="field-label">ICECAST SERVER URL</div>
+      <input type="text" id="icecast-url" placeholder="http://icecast.example.com:8000" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <div class="field-label">MOUNT POINT</div>
+      <input type="text" id="icecast-mount" placeholder="/stream" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <div class="field-label">ADMIN USERNAME</div>
+      <input type="text" id="icecast-user" placeholder="admin" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <div class="field-label">ADMIN PASSWORD</div>
+      <input type="password" id="icecast-pass" placeholder="hackme" autocomplete="off">
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:20px;justify-content:flex-end;">
+      <button class="btn btn-sm" style="border-color:#00ccff;color:#00ccff;" onclick="saveIcecastConfig()">[ SAVE CONFIG ]</button>
+    </div>
+    <div style="font-size:10px;color:var(--green-dim);margin-bottom:16px;letter-spacing:1px;border:1px solid var(--border);padding:10px;">PUSH METADATA UPDATE</div>
+    <div class="form-group">
+      <div class="field-label">ARTIST</div>
+      <input type="text" id="icecast-artist" placeholder="Artist name" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <div class="field-label">TITLE / SONG</div>
+      <input type="text" id="icecast-title" placeholder="Song title or stream title" autocomplete="off">
+    </div>
+    <div style="display:flex;gap:12px;justify-content:flex-end;flex-wrap:wrap;">
+      <button class="btn btn-sm" onclick="closeIcecast()">[ CLOSE ]</button>
+      <button class="btn btn-sm" style="border-color:#00ccff;color:#00ccff;" onclick="pushIcecastMetadata()">[ PUSH METADATA ]</button>
     </div>
   </div>
 </div>
@@ -971,6 +1045,8 @@
               <td>
                 <div class="actions">
                   <button class="btn btn-sm" style="${ep.transcode_enabled ? 'border-color:#00ff41;color:#00ff41;' : 'border-color:#555;color:#555;'}" onclick="toggleTranscode('${ep.id}','${ep.name}',${ep.transcode_enabled ? 1 : 0})" title="Adaptive Bitrate Transcoding (720p/480p/360p)">ABR${ep.transcode_enabled ? ' ●' : ''}</button>
+                  <button class="btn btn-sm" style="${ep.source_mode === 'pull' ? 'border-color:#ffaa00;color:#ffaa00;' : 'border-color:#555;color:#555;'}" onclick="openPull('${ep.id}','${esc(ep.name)}','${esc(ep.source_url || '')}','${ep.source_mode || 'push'}')" title="Pull stream from external URL">PULL${ep.source_mode === 'pull' ? ' ●' : ''}</button>
+                  <button class="btn btn-sm" style="${ep.icecast_url ? 'border-color:#00ccff;color:#00ccff;' : 'border-color:#555;color:#555;'}" onclick="openIcecast('${ep.id}','${esc(ep.name)}','${esc(ep.icecast_url || '')}','${esc(ep.icecast_mount || '')}','${esc(ep.icecast_user || '')}','${esc(ep.icecast_password || '')}')" title="Icecast metadata">ICE${ep.icecast_url ? ' ●' : ''}</button>
                   <button class="btn btn-sm" style="border-color:#2196F3;color:#2196F3;" onclick="copyTelegram('${esc(ep.name)}','${esc(ep.viewerUrl)}')">✈ TG</button>
                   <button type="button" class="btn btn-sm" style="border-color:#aa44ff;color:#aa44ff;" data-action="show-urls" data-endpoint-id="${escapeHtml(ep.id)}">URLS</button>
                   <button class="btn btn-sm" style="border-color:#ffaa00;color:#ffaa00;" onclick="showDebug('${ep.id}','${esc(ep.name)}')">DEBUG</button>
@@ -1012,6 +1088,10 @@
   function openCreateModal() {
     document.getElementById('ep-name').value = '';
     document.getElementById('ep-protocol').value = 'srt';
+    document.getElementById('ep-mode').value = 'push';
+    document.getElementById('ep-source-url').value = '';
+    document.getElementById('ep-protocol-group').style.display = '';
+    document.getElementById('ep-source-url-group').style.display = 'none';
     document.getElementById('created-box').style.display = 'none';
     document.getElementById('modal-form-actions').style.display = 'flex';
     document.getElementById('modal-overlay').classList.add('open');
@@ -1028,12 +1108,15 @@
 
   async function createEndpoint() {
     const name = document.getElementById('ep-name').value.trim();
-    const protocol = document.getElementById('ep-protocol').value;
+    const mode = document.getElementById('ep-mode').value;
+    const protocol = mode === 'push' ? document.getElementById('ep-protocol').value : 'rtmp';
+    const sourceUrl = mode === 'pull' ? document.getElementById('ep-source-url').value.trim() : undefined;
     if (!name) { notify('NAME REQUIRED', true); return; }
+    if (mode === 'pull' && !sourceUrl) { notify('SOURCE URL REQUIRED FOR PULL MODE', true); return; }
 
     const r = await apiFetch('/api/endpoints', {
       method: 'POST',
-      body: JSON.stringify({ name, protocol })
+      body: JSON.stringify({ name, protocol, sourceMode: mode, sourceUrl })
     });
     const data = await r.json();
     if (!r.ok) { notify('ERROR: ' + data.error, true); return; }
@@ -1434,6 +1517,95 @@
     notify('INSTAGRAM RESTREAM STOPPED');
     closeIG();
     refreshAll();
+  }
+
+  // --- CREATE MODAL: mode toggle ---
+  function onModeChange() {
+    const mode = document.getElementById('ep-mode').value;
+    document.getElementById('ep-protocol-group').style.display = mode === 'push' ? '' : 'none';
+    document.getElementById('ep-source-url-group').style.display = mode === 'pull' ? '' : 'none';
+  }
+
+  // --- PULL SOURCE ---
+  let pullEpId = null;
+
+  function openPull(id, name, currentUrl, currentMode) {
+    pullEpId = id;
+    document.getElementById('pull-source-url').value = currentUrl || '';
+    document.getElementById('pull-status-info').textContent = `ENDPOINT: ${name.toUpperCase()} — MODE: ${currentMode.toUpperCase()}`;
+    document.getElementById('pull-disable-btn').style.display = currentMode === 'pull' ? '' : 'none';
+    document.getElementById('pull-overlay').style.display = 'flex';
+  }
+
+  function closePull() {
+    document.getElementById('pull-overlay').style.display = 'none';
+    pullEpId = null;
+  }
+
+  async function savePull() {
+    const url = document.getElementById('pull-source-url').value.trim();
+    if (!url) { notify('SOURCE URL REQUIRED', true); return; }
+    const r = await apiFetch(`/api/endpoints/${pullEpId}/pull/update`, {
+      method: 'POST', body: JSON.stringify({ sourceUrl: url })
+    });
+    const d = await r.json();
+    if (!r.ok) { notify('PULL ERROR: ' + d.error, true); return; }
+    notify('PULL SOURCE ACTIVATED — mediamtx is now fetching the stream');
+    closePull();
+    refreshAll();
+  }
+
+  async function disablePull() {
+    await apiFetch(`/api/endpoints/${pullEpId}/pull/disable`, { method: 'POST' });
+    notify('PULL DISABLED — endpoint is now in PUSH mode');
+    closePull();
+    refreshAll();
+  }
+
+  // --- ICECAST ---
+  let icecastEpId = null;
+
+  function openIcecast(id, name, url, mount, user, pass) {
+    icecastEpId = id;
+    document.getElementById('icecast-status-info').textContent = `ENDPOINT: ${name.toUpperCase()}`;
+    document.getElementById('icecast-url').value = url || '';
+    document.getElementById('icecast-mount').value = mount || '';
+    document.getElementById('icecast-user').value = user || 'admin';
+    document.getElementById('icecast-pass').value = pass || '';
+    document.getElementById('icecast-artist').value = '';
+    document.getElementById('icecast-title').value = '';
+    document.getElementById('icecast-overlay').style.display = 'flex';
+  }
+
+  function closeIcecast() {
+    document.getElementById('icecast-overlay').style.display = 'none';
+    icecastEpId = null;
+  }
+
+  async function saveIcecastConfig() {
+    const icecastUrl = document.getElementById('icecast-url').value.trim();
+    const icecastMount = document.getElementById('icecast-mount').value.trim();
+    const icecastUser = document.getElementById('icecast-user').value.trim();
+    const icecastPassword = document.getElementById('icecast-pass').value;
+    if (!icecastUrl || !icecastMount) { notify('SERVER URL AND MOUNT REQUIRED', true); return; }
+    const r = await apiFetch(`/api/endpoints/${icecastEpId}/icecast/configure`, {
+      method: 'POST', body: JSON.stringify({ icecastUrl, icecastMount, icecastUser, icecastPassword })
+    });
+    if (!r.ok) { const d = await r.json(); notify('ERROR: ' + d.error, true); return; }
+    notify('ICECAST CONFIG SAVED');
+    refreshAll();
+  }
+
+  async function pushIcecastMetadata() {
+    const artist = document.getElementById('icecast-artist').value.trim();
+    const title = document.getElementById('icecast-title').value.trim();
+    if (!title && !artist) { notify('TITLE OR ARTIST REQUIRED', true); return; }
+    const r = await apiFetch(`/api/endpoints/${icecastEpId}/icecast/metadata`, {
+      method: 'POST', body: JSON.stringify({ artist, title })
+    });
+    const d = await r.json();
+    if (!r.ok) { notify('ICECAST ERROR: ' + d.error, true); return; }
+    notify(`METADATA PUSHED: ${d.song}`);
   }
 
   // --- TRANSCODE (ABR) ---
