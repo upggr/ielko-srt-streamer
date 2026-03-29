@@ -12,6 +12,13 @@ const app = express();
 const PORT = parseInt(process.env.PORT || '3000');
 const PUBLIC_URL = process.env.PUBLIC_URL || 'https://streams.upg.gr:666';
 
+const tp = (process.env.TRUST_PROXY || '').trim().toLowerCase();
+if (tp === '1' || tp === 'true' || tp === 'yes') {
+  app.set('trust proxy', 1);
+} else if (/^\d+$/.test(tp)) {
+  app.set('trust proxy', parseInt(tp, 10));
+}
+
 app.use(express.json());
 
 // Static UI

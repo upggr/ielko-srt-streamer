@@ -63,17 +63,28 @@ ufw enable
 | `APP_PASSWORD` | No | UI login password — auto-generated on first boot |
 | `SESSION_SECRET` | No | Session signing secret — auto-generated on first boot |
 | `SERVER_IP` | No | Public IP — auto-detected on first boot |
-| `PUBLIC_URL` | No | Public base URL — derived from SERVER_IP on first boot |
+| `PUBLIC_HOST` | No | FQDN for HTTPS (e.g. `stream.example.com`). When set, bootstrap sets `PUBLIC_URL` to `https://…` and defaults `TRUST_PROXY=1` |
+| `PUBLIC_URL` | No | Public base URL — derived from `PUBLIC_HOST`, or from `SERVER_IP` on first boot |
+| `TRUST_PROXY` | No | Set to `1` when the API sits **behind Caddy or another reverse proxy** so Express honors `X-Forwarded-Proto` / `X-Forwarded-For` (correct HTTPS detection, client IPs) |
+| `LETSENCRYPT_EMAIL` | No | Email for ACME registration (used by host Caddy install from the dashboard one-liner) |
 | `LICENSE_VALIDATE_URL` | No | Override license validation endpoint |
 
-## Domain & SSL
+## Reverse proxy (Caddy / TLS)
 
-After first boot, go to **Settings** in the UI to configure a custom domain. The UI will generate the Caddy install command for you.
+When **Caddy** (or nginx) terminates TLS in front of the app:
 
-Manual steps:
-1. Point your domain A record to `SERVER_IP`
-2. Enter the domain in Settings → Save
-3. Copy the Caddy command and run it on your server
+1. Terminate HTTPS on 443 and **reverse_proxy** to `127.0.0.1:3000` (the Docker-published API port).
+2. Set **`TRUST_PROXY=1`** in `.env` (the dashboard install command adds this automatically with `PUBLIC_HOST`).
+3. Set **`PUBLIC_HOST`** (or ensure **`PUBLIC_URL`** is `https://your.hostname`) so HLS/WebRTC/watch URLs use the public HTTPS origin.
+
+Caddy sends `X-Forwarded-For`, `X-Forwarded-Proto`, and `Host` by default. With `trust proxy` enabled, `req.secure` and `req.protocol` match what browsers see.
+
+After first boot, you can still use **Settings** in the UI to adjust domain / public URL when not using the dashboard one-liner.
+
+Manual steps (if not using services.buy-it.gr install flow):
+1. Point your domain A/AAAA record to `SERVER_IP`
+2. Configure Caddy/nginx + Let’s Encrypt
+3. Set `PUBLIC_URL`, `PUBLIC_HOST`, and `TRUST_PROXY=1` in `.env`, then `docker compose up -d`
 
 ## Architecture
 

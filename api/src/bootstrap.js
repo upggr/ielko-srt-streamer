@@ -91,8 +91,25 @@ async function bootstrap() {
     process.env.SERVER_IP = ip;
   }
 
-  // --- PUBLIC_URL ---
-  if (!process.env.PUBLIC_URL || process.env.PUBLIC_URL === 'https://streams.ioniantv.gr') {
+  // --- PUBLIC_URL: prefer PUBLIC_HOST (HTTPS / Caddy) from services.buy-it.gr install ---
+  const publicHost = (process.env.PUBLIC_HOST || '').trim();
+  const validPublicHost =
+    publicHost &&
+    /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z0-9.-]+$/i.test(publicHost) &&
+    !publicHost.includes('..');
+
+  if (validPublicHost) {
+    const httpsUrl = `https://${publicHost.toLowerCase()}`;
+    process.env.PUBLIC_URL = httpsUrl;
+    const stored = getConfig('public_url');
+    if (stored !== httpsUrl) {
+      setConfig('public_url', httpsUrl);
+      changed = true;
+    }
+    if (!process.env.TRUST_PROXY) {
+      process.env.TRUST_PROXY = '1';
+    }
+  } else if (!process.env.PUBLIC_URL || process.env.PUBLIC_URL === 'https://streams.ioniantv.gr') {
     let url = getConfig('public_url');
     if (!url) {
       url = `http://${process.env.SERVER_IP}:3000`;

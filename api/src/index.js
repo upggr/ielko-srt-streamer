@@ -21,6 +21,14 @@ function startApp() {
   const PORT = parseInt(process.env.PORT || '3000');
   const MEDIAMTX = 'http://mediamtx';
 
+  // Behind Caddy/nginx: use X-Forwarded-* so req.secure / req.protocol reflect HTTPS for clients.
+  const tp = (process.env.TRUST_PROXY || '').trim().toLowerCase();
+  if (tp === '1' || tp === 'true' || tp === 'yes') {
+    app.set('trust proxy', 1);
+  } else if (/^\d+$/.test(tp)) {
+    app.set('trust proxy', parseInt(tp, 10));
+  }
+
   app.use(express.json());
   app.use(express.static(path.join(__dirname, '..', 'ui')));
 
