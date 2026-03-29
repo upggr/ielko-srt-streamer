@@ -15,9 +15,13 @@ fi
 envsubst < /etc/icecast2/icecast.xml.tmpl > /etc/icecast2/icecast.xml
 
 mkdir -p /var/log/icecast2 /var/run/icecast2
+chown -R icecast2:icecast /var/log/icecast2 /var/run/icecast2 2>/dev/null || true
 
 echo "[icecast] source-password: $ICECAST_SOURCE_PASSWORD"
 echo "[icecast] admin-password:  $ICECAST_ADMIN_PASSWORD"
 echo "[icecast] hostname:        ${ICECAST_HOSTNAME:-localhost}"
 
-exec icecast2 -c /etc/icecast2/icecast.xml
+# Run as icecast2 user to satisfy icecast's root-check
+exec su-exec icecast2 icecast2 -c /etc/icecast2/icecast.xml 2>/dev/null || \
+  exec gosu icecast2 icecast2 -c /etc/icecast2/icecast.xml 2>/dev/null || \
+  exec icecast2 -c /etc/icecast2/icecast.xml

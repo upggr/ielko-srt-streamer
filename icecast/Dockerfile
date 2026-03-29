@@ -3,6 +3,8 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     icecast2 \
     gettext-base \
+    gosu \
+    mime-support \
  && rm -rf /var/lib/apt/lists/*
 
 COPY icecast.xml.tmpl /etc/icecast2/icecast.xml.tmpl
