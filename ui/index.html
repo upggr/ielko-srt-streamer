@@ -863,11 +863,12 @@
 
     <div class="form-group" id="ep-protocol-group">
       <div class="field-label">PROTOCOL</div>
-      <select id="ep-protocol">
+      <select id="ep-protocol" onchange="onProtocolChange()">
         <option value="srt">SRT — Secure Reliable Transport</option>
+        <option value="rtmp">RTMP</option>
+        <option value="icecast">Icecast — audio radio stream (Mixxx / Butt / Liquidsoap)</option>
         <option value="mpegts">MPEGTS — MPEG Transport Stream</option>
         <option value="udp">UDP — Raw UDP</option>
-        <option value="rtmp">RTMP</option>
       </select>
     </div>
 
@@ -909,46 +910,6 @@
   </div>
 </div>
 
-<!-- ICECAST MODAL -->
-<div id="icecast-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:160;align-items:center;justify-content:center;">
-  <div style="background:var(--bg);border:1px solid #00ccff;box-shadow:0 0 40px rgba(0,204,255,0.15);width:96%;max-width:520px;padding:32px;max-height:90vh;overflow-y:auto;">
-    <div style="font-size:12px;letter-spacing:4px;color:#00ccff;margin-bottom:24px;">// ICECAST METADATA</div>
-    <div id="icecast-status-info" style="font-size:11px;color:var(--green-dim);margin-bottom:16px;letter-spacing:1px;"></div>
-    <div style="font-size:10px;color:var(--green-dim);margin-bottom:16px;letter-spacing:1px;border:1px solid var(--border);padding:10px;">SERVER CONFIGURATION</div>
-    <div class="form-group">
-      <div class="field-label">ICECAST SERVER URL</div>
-      <input type="text" id="icecast-url" placeholder="http://icecast.example.com:8000" autocomplete="off">
-    </div>
-    <div class="form-group">
-      <div class="field-label">MOUNT POINT</div>
-      <input type="text" id="icecast-mount" placeholder="/stream" autocomplete="off">
-    </div>
-    <div class="form-group">
-      <div class="field-label">ADMIN USERNAME</div>
-      <input type="text" id="icecast-user" placeholder="admin" autocomplete="off">
-    </div>
-    <div class="form-group">
-      <div class="field-label">ADMIN PASSWORD</div>
-      <input type="password" id="icecast-pass" placeholder="hackme" autocomplete="off">
-    </div>
-    <div style="display:flex;gap:10px;margin-bottom:20px;justify-content:flex-end;">
-      <button class="btn btn-sm" style="border-color:#00ccff;color:#00ccff;" onclick="saveIcecastConfig()">[ SAVE CONFIG ]</button>
-    </div>
-    <div style="font-size:10px;color:var(--green-dim);margin-bottom:16px;letter-spacing:1px;border:1px solid var(--border);padding:10px;">PUSH METADATA UPDATE</div>
-    <div class="form-group">
-      <div class="field-label">ARTIST</div>
-      <input type="text" id="icecast-artist" placeholder="Artist name" autocomplete="off">
-    </div>
-    <div class="form-group">
-      <div class="field-label">TITLE / SONG</div>
-      <input type="text" id="icecast-title" placeholder="Song title or stream title" autocomplete="off">
-    </div>
-    <div style="display:flex;gap:12px;justify-content:flex-end;flex-wrap:wrap;">
-      <button class="btn btn-sm" onclick="closeIcecast()">[ CLOSE ]</button>
-      <button class="btn btn-sm" style="border-color:#00ccff;color:#00ccff;" onclick="pushIcecastMetadata()">[ PUSH METADATA ]</button>
-    </div>
-  </div>
-</div>
 
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script>
@@ -1156,22 +1117,27 @@
                 </span>
               </td>
               <td class="url-cell">
-                <a href="#" onclick="openPlayer('${esc(ep.name)}','${esc(ep.hlsUrl)}','${esc(ep.viewerUrl)}','${esc(ep.webrtcUrl||'')}');return false;" style="color:var(--green-dim);text-decoration:none;" title="Open player">${ep.viewerUrl}</a>
-                <br>
-                <button class="copy-btn" onclick="copyText('${esc(ep.viewerUrl)}')">COPY</button>
-                <button class="copy-btn" onclick="openPlayer('${esc(ep.name)}','${esc(ep.hlsUrl)}','${esc(ep.viewerUrl)}','${esc(ep.webrtcUrl||'')}')">▶ PLAY</button>
+                ${ep.protocol === 'icecast'
+                  ? `<span style="color:var(--green-dim);">${ep.viewerUrl}</span><br>
+                     <button class="copy-btn" onclick="copyText('${esc(ep.viewerUrl)}')">COPY</button>`
+                  : `<a href="#" onclick="openPlayer('${esc(ep.name)}','${esc(ep.hlsUrl)}','${esc(ep.viewerUrl)}','${esc(ep.webrtcUrl||'')}');return false;" style="color:var(--green-dim);text-decoration:none;" title="Open player">${ep.viewerUrl}</a>
+                     <br>
+                     <button class="copy-btn" onclick="copyText('${esc(ep.viewerUrl)}')">COPY</button>
+                     <button class="copy-btn" onclick="openPlayer('${esc(ep.name)}','${esc(ep.hlsUrl)}','${esc(ep.viewerUrl)}','${esc(ep.webrtcUrl||'')}')">▶ PLAY</button>`
+                }
               </td>
               <td>
                 <div class="actions">
+                  ${ep.protocol !== 'icecast' ? `
                   <button class="btn btn-sm" style="${ep.transcode_enabled ? 'border-color:#00ff41;color:#00ff41;' : 'border-color:#555;color:#555;'}" onclick="toggleTranscode('${ep.id}','${ep.name}',${ep.transcode_enabled ? 1 : 0})" title="Adaptive Bitrate Transcoding (720p/480p/360p)">ABR${ep.transcode_enabled ? ' ●' : ''}</button>
                   <button class="btn btn-sm" style="${ep.source_mode === 'pull' ? 'border-color:#ffaa00;color:#ffaa00;' : 'border-color:#555;color:#555;'}" onclick="openPull('${ep.id}','${esc(ep.name)}','${esc(ep.source_url || '')}','${ep.source_mode || 'push'}')" title="Pull stream from external URL">PULL${ep.source_mode === 'pull' ? ' ●' : ''}</button>
-                  <button class="btn btn-sm" style="${ep.icecast_url ? 'border-color:#00ccff;color:#00ccff;' : 'border-color:#555;color:#555;'}" onclick="openIcecast('${ep.id}','${esc(ep.name)}','${esc(ep.icecast_url || '')}','${esc(ep.icecast_mount || '')}','${esc(ep.icecast_user || '')}','${esc(ep.icecast_password || '')}')" title="Icecast metadata">ICE${ep.icecast_url ? ' ●' : ''}</button>
                   <button class="btn btn-sm" style="border-color:#2196F3;color:#2196F3;" onclick="copyTelegram('${esc(ep.name)}','${esc(ep.viewerUrl)}')">✈ TG</button>
                   <button type="button" class="btn btn-sm" style="border-color:#aa44ff;color:#aa44ff;" data-action="show-urls" data-endpoint-id="${escapeHtml(ep.id)}">URLS</button>
                   <button class="btn btn-sm" style="border-color:#ffaa00;color:#ffaa00;" onclick="showDebug('${ep.id}','${esc(ep.name)}')">DEBUG</button>
                   <button class="btn btn-sm" style="border-color:#ff0000;color:#ff0000;" onclick="openYT('${ep.id}','${esc(ep.name)}','${ep.yt_status || 'off'}','${esc(ep.yt_stream_key || '')}')">YT</button>
                   <button class="btn btn-sm" style="border-color:#1877f2;color:#1877f2;" onclick="openFB('${ep.id}','${esc(ep.name)}','${ep.fb_status || 'off'}','${esc(ep.fb_stream_key || '')}')">FB</button>
                   <button class="btn btn-sm" style="border-color:#e1306c;color:#e1306c;" onclick="openIG('${ep.id}','${esc(ep.name)}','${ep.ig_status || 'off'}','${esc(ep.ig_stream_key || '')}')">IG</button>
+                  ` : ''}
                   <button class="btn btn-sm btn-danger" onclick="deleteEp('${ep.id}', '${ep.name}')">DEL</button>
                 </div>
               </td>
@@ -1246,20 +1212,30 @@
     let rows = '';
     rows += infoRow('NAME', data.name);
     rows += infoRow('PROTOCOL', data.protocol.toUpperCase());
-    rows += infoRow('PORT', data.port);
-    if (data.srt_password) rows += infoRow('PASSPHRASE', data.srt_password);
-    rows += infoRow('SENDER URL', data.senderUrl, true);
-    if (data.protocol === 'srt') {
-      rows += `<div class="info-row">
-        <div class="info-label">ENCODER</div>
-        <div class="info-value" style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button type="button" class="copy-btn" data-action="encoder-help" data-app="obs" data-payload="${encodeURIComponent(data.senderUrl)}">OBS — fields</button>
-          <button type="button" class="copy-btn" data-action="encoder-help" data-app="vmix" data-payload="${encodeURIComponent(data.senderUrl)}">vMIX — fields</button>
-        </div>
-      </div>`;
+
+    if (data.protocol === 'icecast') {
+      rows += infoRow('SOURCE URL (encoder → us)', data.senderUrl, true);
+      rows += infoRow('LISTEN URL (listeners)', data.viewerUrl, true);
+      rows += `<div class="info-row"><div class="info-label">HOW TO CONNECT</div>
+        <div class="info-value" style="font-size:9px;line-height:1.8;color:var(--green-dim);">
+          In Mixxx / BUTT / Liquidsoap set: <strong>host</strong> = server IP, <strong>port</strong> = 8000,
+          <strong>mount</strong> = /${escapeHtml(data.name)}, <strong>password</strong> = source password shown above.
+        </div></div>`;
+    } else {
+      if (data.srt_password) rows += infoRow('PASSPHRASE', data.srt_password);
+      rows += infoRow('SENDER URL', data.senderUrl, true);
+      if (data.protocol === 'srt') {
+        rows += `<div class="info-row">
+          <div class="info-label">ENCODER</div>
+          <div class="info-value" style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button type="button" class="copy-btn" data-action="encoder-help" data-app="obs" data-payload="${encodeURIComponent(data.senderUrl)}">OBS — fields</button>
+            <button type="button" class="copy-btn" data-action="encoder-help" data-app="vmix" data-payload="${encodeURIComponent(data.senderUrl)}">vMIX — fields</button>
+          </div>
+        </div>`;
+      }
+      rows += infoRow('VIEWER URL', data.viewerUrl, true);
+      rows += infoRow('HLS FEED', data.hlsUrl, true);
     }
-    rows += infoRow('VIEWER URL', data.viewerUrl, true);
-    rows += infoRow('HLS FEED', data.hlsUrl, true);
 
     document.getElementById('created-info').innerHTML = rows;
     refreshAll();
@@ -1790,6 +1766,14 @@ sudo systemctl enable caddy`;
     const mode = document.getElementById('ep-mode').value;
     document.getElementById('ep-protocol-group').style.display = mode === 'push' ? '' : 'none';
     document.getElementById('ep-source-url-group').style.display = mode === 'pull' ? '' : 'none';
+    if (mode === 'push') onProtocolChange();
+  }
+
+  function onProtocolChange() {
+    const protocol = document.getElementById('ep-protocol').value;
+    // Icecast is push-only — hide the mode selector when icecast is selected
+    document.getElementById('ep-mode').style.display = protocol === 'icecast' ? 'none' : '';
+    document.querySelector('[for="ep-mode"], .field-label').style.display = protocol === 'icecast' ? 'none' : '';
   }
 
   // --- PULL SOURCE ---
@@ -1826,52 +1810,6 @@ sudo systemctl enable caddy`;
     notify('PULL DISABLED — endpoint is now in PUSH mode');
     closePull();
     refreshAll();
-  }
-
-  // --- ICECAST ---
-  let icecastEpId = null;
-
-  function openIcecast(id, name, url, mount, user, pass) {
-    icecastEpId = id;
-    document.getElementById('icecast-status-info').textContent = `ENDPOINT: ${name.toUpperCase()}`;
-    document.getElementById('icecast-url').value = url || '';
-    document.getElementById('icecast-mount').value = mount || '';
-    document.getElementById('icecast-user').value = user || 'admin';
-    document.getElementById('icecast-pass').value = pass || '';
-    document.getElementById('icecast-artist').value = '';
-    document.getElementById('icecast-title').value = '';
-    document.getElementById('icecast-overlay').style.display = 'flex';
-  }
-
-  function closeIcecast() {
-    document.getElementById('icecast-overlay').style.display = 'none';
-    icecastEpId = null;
-  }
-
-  async function saveIcecastConfig() {
-    const icecastUrl = document.getElementById('icecast-url').value.trim();
-    const icecastMount = document.getElementById('icecast-mount').value.trim();
-    const icecastUser = document.getElementById('icecast-user').value.trim();
-    const icecastPassword = document.getElementById('icecast-pass').value;
-    if (!icecastUrl || !icecastMount) { notify('SERVER URL AND MOUNT REQUIRED', true); return; }
-    const r = await apiFetch(`/api/endpoints/${icecastEpId}/icecast/configure`, {
-      method: 'POST', body: JSON.stringify({ icecastUrl, icecastMount, icecastUser, icecastPassword })
-    });
-    if (!r.ok) { const d = await r.json(); notify('ERROR: ' + d.error, true); return; }
-    notify('ICECAST CONFIG SAVED');
-    refreshAll();
-  }
-
-  async function pushIcecastMetadata() {
-    const artist = document.getElementById('icecast-artist').value.trim();
-    const title = document.getElementById('icecast-title').value.trim();
-    if (!title && !artist) { notify('TITLE OR ARTIST REQUIRED', true); return; }
-    const r = await apiFetch(`/api/endpoints/${icecastEpId}/icecast/metadata`, {
-      method: 'POST', body: JSON.stringify({ artist, title })
-    });
-    const d = await r.json();
-    if (!r.ok) { notify('ICECAST ERROR: ' + d.error, true); return; }
-    notify(`METADATA PUSHED: ${d.song}`);
   }
 
   // --- TRANSCODE (ABR) ---

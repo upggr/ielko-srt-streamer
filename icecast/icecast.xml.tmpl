@@ -1,0 +1,54 @@
+<icecast>
+  <location>Earth</location>
+  <admin>${ICECAST_ADMIN_EMAIL:-icemaster@localhost}</admin>
+
+  <limits>
+    <clients>100</clients>
+    <sources>10</sources>
+    <queue-size>524288</queue-size>
+    <client-timeout>30</client-timeout>
+    <header-timeout>15</header-timeout>
+    <source-timeout>10</source-timeout>
+    <burst-on-connect>1</burst-on-connect>
+    <burst-size>65535</burst-size>
+  </limits>
+
+  <authentication>
+    <!-- Source clients authenticate with this password -->
+    <source-password>${ICECAST_SOURCE_PASSWORD}</source-password>
+    <!-- Relay servers authenticate with this password -->
+    <relay-password>${ICECAST_RELAY_PASSWORD:-relay-secret}</relay-password>
+    <!-- Admin interface password -->
+    <admin-user>admin</admin-user>
+    <admin-password>${ICECAST_ADMIN_PASSWORD}</admin-password>
+  </authentication>
+
+  <hostname>${ICECAST_HOSTNAME:-localhost}</hostname>
+
+  <listen-socket>
+    <port>8000</port>
+  </listen-socket>
+
+  <http-headers>
+    <header name="Access-Control-Allow-Origin" value="*" />
+  </http-headers>
+
+  <paths>
+    <basedir>/usr/share/icecast2</basedir>
+    <logdir>/var/log/icecast2</logdir>
+    <webroot>/usr/share/icecast2/web</webroot>
+    <adminroot>/usr/share/icecast2/admin</adminroot>
+    <pidfile>/var/run/icecast2/icecast.pid</pidfile>
+  </paths>
+
+  <logging>
+    <accesslog>access.log</accesslog>
+    <errorlog>error.log</errorlog>
+    <loglevel>3</loglevel>
+    <logsize>10000</logsize>
+  </logging>
+
+  <security>
+    <chroot>0</chroot>
+  </security>
+</icecast>

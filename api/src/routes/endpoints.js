@@ -9,16 +9,35 @@ const { getState: getLicenseState } = require('../services/licenseGuard');
 const { withPlanLimits } = require('../services/mediamtxPathConfig');
 
 const router = Router();
-const SERVER_IP = process.env.SERVER_IP || '88.198.184.233';
-const PUBLIC_URL = process.env.PUBLIC_URL || 'https://streams.ioniantv.gr';
+const SERVER_IP = process.env.SERVER_IP || '127.0.0.1';
+const PUBLIC_URL = process.env.PUBLIC_URL || '';
 const SRT_PORT = 8890;
 const RTMP_PORT = 1935;
+const ICECAST_PORT = 8000;
+
+function getIcecastSourcePassword() {
+  return process.env.ICECAST_SOURCE_PASSWORD || null;
+}
 
 function buildUrls(protocol, name, srtPassword, transcodeEnabled, rtmpPassword) {
+  if (protocol === 'icecast') {
+    const pass = getIcecastSourcePassword();
+    const sourceUrl = pass
+      ? `icecast://source:${pass}@${SERVER_IP}:${ICECAST_PORT}/${name}`
+      : `icecast://source:<password>@${SERVER_IP}:${ICECAST_PORT}/${name}`;
+    const listenUrl = `http://${SERVER_IP}:${ICECAST_PORT}/${name}`;
+    const publicListenUrl = PUBLIC_URL ? `${PUBLIC_URL.replace(/^https/, 'http').replace(/^http/, 'http')}:${ICECAST_PORT}/${name}` : listenUrl;
+    return {
+      senderUrl: sourceUrl,
+      viewerUrl: publicListenUrl,
+      icecastListenUrl: publicListenUrl,
+      hlsUrl: null, hlsSourceUrl: null, hls720pUrl: null, hls480pUrl: null, hls360pUrl: null,
+      webrtcUrl: null, m3uUrl: null, srtPullUrl: null, udpUrl: null, rtmpUrl: null, embedUrl: null,
+    };
+  }
+
   let senderUrl;
   if (protocol === 'srt') {
-    // SRT passphrase is set as a path-level srtPublishPassphrase in MediaMTX.
-    // Encoders (OBS, vMix, ffmpeg) supply it via the passphrase/pbkeylen SRT parameters.
     const passphraseParam = srtPassword ? `&passphrase=${encodeURIComponent(srtPassword)}&pbkeylen=16` : '';
     senderUrl = `srt://${SERVER_IP}:${SRT_PORT}?streamid=publish:${name}&latency=200${passphraseParam}`;
   } else if (rtmpPassword) {
@@ -68,8 +87,8 @@ router.post('/', async (req, res) => {
 
   const { name, protocol, sourceMode, sourceUrl } = req.body;
   if (!name || !protocol) { res.status(400).json({ error: 'name and protocol required' }); return; }
-  if (!['srt', 'mpegts', 'udp', 'rtmp', 'rtsp', 'hls'].includes(protocol)) {
-    res.status(400).json({ error: 'protocol must be srt, mpegts, udp, rtmp, rtsp, or hls' }); return;
+  if (!['srt', 'mpegts', 'udp', 'rtmp', 'rtsp', 'hls', 'icecast'].includes(protocol)) {
+    res.status(400).json({ error: 'protocol must be srt, mpegts, udp, rtmp, rtsp, hls, or icecast' }); return;
   }
   const mode = sourceMode === 'pull' ? 'pull' : 'push';
   if (mode === 'pull' && !sourceUrl) { res.status(400).json({ error: 'sourceUrl required for pull mode' }); return; }
@@ -81,13 +100,15 @@ router.post('/', async (req, res) => {
   const srtPassword = protocol === 'srt' && mode === 'push' ? crypto.randomBytes(8).toString('hex') : null;
   const rtmpPassword = protocol === 'rtmp' && mode === 'push' ? crypto.randomBytes(8).toString('hex') : null;
 
-  // Register path in mediamtx — pull mode sets source URL so mediamtx fetches automatically
-  try {
-    const pathConf = mode === 'pull' ? { source: sourceUrl } : {};
-    const auth = { protocol, mode, srtPassword, rtmpPassword };
-    await addPath(slugName, withPlanLimits(getLicenseState().plan, pathConf, auth));
-  } catch (e) {
-    console.error('mediamtx addPath error:', e.message);
+  // Icecast endpoints are handled by the icecast container — no mediamtx path needed
+  if (protocol !== 'icecast') {
+    try {
+      const pathConf = mode === 'pull' ? { source: sourceUrl } : {};
+      const auth = { protocol, mode, srtPassword, rtmpPassword };
+      await addPath(slugName, withPlanLimits(getLicenseState().plan, pathConf, auth));
+    } catch (e) {
+      console.error('mediamtx addPath error:', e.message);
+    }
   }
 
   db.prepare('INSERT INTO endpoints (id, name, protocol, port, srt_password, rtmp_password, status, source_mode, source_url) VALUES (?, ?, ?, 0, ?, ?, \'stopped\', ?, ?)').run(id, slugName, protocol, srtPassword, rtmpPassword, mode, sourceUrl || null);
@@ -98,12 +119,13 @@ router.post('/', async (req, res) => {
 router.post('/:id/start', async (req, res) => {
   const ep = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(req.params.id);
   if (!ep) { res.status(404).json({ error: 'Not found' }); return; }
-  // With mediamtx, "starting" means registering the path and marking as ready
-  try {
-    const auth = { protocol: ep.protocol, mode: ep.source_mode, srtPassword: ep.srt_password, rtmpPassword: ep.rtmp_password };
-    await addPath(ep.name, withPlanLimits(getLicenseState().plan, {}, auth));
-  } catch (e) {
-    // May already exist — that's fine
+  if (ep.protocol !== 'icecast') {
+    try {
+      const auth = { protocol: ep.protocol, mode: ep.source_mode, srtPassword: ep.srt_password, rtmpPassword: ep.rtmp_password };
+      await addPath(ep.name, withPlanLimits(getLicenseState().plan, {}, auth));
+    } catch (e) {
+      // May already exist — that's fine
+    }
   }
   db.prepare("UPDATE endpoints SET status='running', updated_at=datetime('now') WHERE id=?").run(ep.id);
   res.json({ ok: true, status: 'running' });
@@ -112,10 +134,12 @@ router.post('/:id/start', async (req, res) => {
 router.post('/:id/stop', async (req, res) => {
   const ep = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(req.params.id);
   if (!ep) { res.status(404).json({ error: 'Not found' }); return; }
-  try {
-    await removePath(ep.name);
-  } catch (e) {
-    // May not exist — that's fine
+  if (ep.protocol !== 'icecast') {
+    try {
+      await removePath(ep.name);
+    } catch (e) {
+      // May not exist — that's fine
+    }
   }
   db.prepare("UPDATE endpoints SET status='stopped', updated_at=datetime('now') WHERE id=?").run(ep.id);
   res.json({ ok: true, status: 'stopped' });
@@ -234,55 +258,13 @@ router.post('/:id/pull/disable', async (req, res) => {
   res.json({ ok: true });
 });
 
-// Icecast metadata push
-router.post('/:id/icecast/configure', (req, res) => {
-  const ep = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(req.params.id);
-  if (!ep) { res.status(404).json({ error: 'Not found' }); return; }
-  const { icecastUrl, icecastMount, icecastUser, icecastPassword } = req.body;
-  if (!icecastUrl || !icecastMount) { res.status(400).json({ error: 'icecastUrl and icecastMount required' }); return; }
-  db.prepare('UPDATE endpoints SET icecast_url=?, icecast_mount=?, icecast_user=?, icecast_password=? WHERE id=?').run(icecastUrl, icecastMount, icecastUser || 'admin', icecastPassword || '', ep.id);
-  res.json({ ok: true });
-});
-
-router.post('/:id/icecast/metadata', async (req, res) => {
-  const ep = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(req.params.id);
-  if (!ep) { res.status(404).json({ error: 'Not found' }); return; }
-  if (!ep.icecast_url || !ep.icecast_mount) { res.status(400).json({ error: 'Icecast not configured for this endpoint' }); return; }
-  const { song, artist, title } = req.body;
-  const songStr = [artist, title || song].filter(Boolean).join(' - ') || song || '';
-  if (!songStr) { res.status(400).json({ error: 'song or title required' }); return; }
-
-  // Icecast admin metadata update endpoint
-  const base = ep.icecast_url.replace(/\/$/, '');
-  const mount = ep.icecast_mount.startsWith('/') ? ep.icecast_mount : '/' + ep.icecast_mount;
-  const url = new URL(`${base}/admin/metadata`);
-  url.searchParams.set('mount', mount);
-  url.searchParams.set('mode', 'updinfo');
-  url.searchParams.set('song', songStr);
-
-  const user = ep.icecast_user || 'admin';
-  const pass = ep.icecast_password || '';
-  const auth = Buffer.from(`${user}:${pass}`).toString('base64');
-
-  const http = require('http');
-  const https = require('https');
-  const lib = url.protocol === 'https:' ? https : http;
-  const reqOut = lib.request(url.toString(), {
-    method: 'GET',
-    headers: { 'Authorization': `Basic ${auth}` },
-  }, iceRes => {
-    let data = '';
-    iceRes.on('data', d => { data += d; });
-    iceRes.on('end', () => {
-      if (iceRes.statusCode === 200) {
-        res.json({ ok: true, song: songStr });
-      } else {
-        res.status(502).json({ error: `Icecast returned ${iceRes.statusCode}`, body: data.slice(0, 200) });
-      }
-    });
+// Icecast server credentials — read by the UI so it can show connection details
+router.get('/icecast/config', (req, res) => {
+  res.json({
+    sourcePassword: getIcecastSourcePassword(),
+    port: ICECAST_PORT,
+    serverIp: SERVER_IP,
   });
-  reqOut.on('error', e => res.status(502).json({ error: e.message }));
-  reqOut.end();
 });
 
 router.post('/:id/transcode/start', (req, res) => {
