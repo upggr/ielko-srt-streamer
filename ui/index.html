@@ -597,6 +597,7 @@
     </div>
     <div style="display:flex; gap:16px; align-items:center;">
       <div class="sys-info"><span class="blink">■</span> SYSTEM ONLINE</div>
+      <button class="btn btn-sm" style="border-color:#888;color:#888;" onclick="openSettings()">[ SETTINGS ]</button>
       <button class="btn btn-sm btn-danger" onclick="doLogout()">[ LOGOUT ]</button>
     </div>
   </div>
@@ -655,6 +656,54 @@
   <!-- FOOTER -->
   <div style="border-top:1px solid var(--border); padding:12px 24px; text-align:center; color:var(--green-dim); font-size:10px; letter-spacing:2px;">
     CREATED BY KOKKINIS IOANNIS &nbsp;|&nbsp; UPG STREAM CONTROL &nbsp;|&nbsp; <span class="blink">■</span> ONLINE
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div id="settings-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:170;align-items:center;justify-content:center;">
+  <div style="background:var(--bg);border:1px solid var(--green);box-shadow:0 0 40px var(--green-glow);width:96%;max-width:580px;padding:32px;max-height:90vh;overflow-y:auto;">
+    <div style="font-size:12px;letter-spacing:4px;color:var(--green);margin-bottom:24px;">// SETTINGS</div>
+
+    <!-- Current config display -->
+    <div style="margin-bottom:20px;padding:12px;border:1px solid var(--border);background:var(--bg2);font-size:10px;color:var(--green-dim);line-height:1.8;">
+      <div>PUBLIC URL: <span id="cfg-public-url" style="color:var(--green);">--</span></div>
+      <div>SERVER IP: <span id="cfg-server-ip" style="color:var(--green);">--</span></div>
+      <div>LICENSE: <span id="cfg-license" style="color:var(--green);">--</span></div>
+    </div>
+
+    <!-- Domain section -->
+    <div style="font-size:10px;color:var(--green-dim);margin-bottom:12px;letter-spacing:2px;border-bottom:1px solid var(--border);padding-bottom:8px;">DOMAIN & SSL</div>
+
+    <div class="form-group">
+      <div class="field-label">DOMAIN NAME</div>
+      <input type="text" id="settings-domain" placeholder="streams.example.com" autocomplete="off">
+      <div style="font-size:9px;color:var(--green-dim);margin-top:4px;letter-spacing:1px;">Without https:// — just the domain</div>
+    </div>
+
+    <div style="margin-bottom:20px;padding:12px;border:1px solid #ffaa00;background:rgba(255,170,0,0.05);font-size:10px;color:#ffaa00;line-height:1.9;">
+      <div style="letter-spacing:2px;margin-bottom:8px;">// DNS SETUP REQUIRED</div>
+      <div>1. Point your domain A record to: <strong id="dns-ip" style="color:#fff;">--</strong></div>
+      <div>2. Save the domain below</div>
+      <div>3. Run SSL setup (installs Caddy as reverse proxy)</div>
+      <div style="margin-top:8px;opacity:0.7;font-size:9px;">SSL is handled by Caddy — auto-renews via Let's Encrypt. Port 80 + 443 must be open.</div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;">
+      <button class="btn btn-sm" style="border-color:#ffaa00;color:#ffaa00;" onclick="saveDomain()">[ SAVE DOMAIN ]</button>
+      <button class="btn btn-sm" id="ssl-btn" style="border-color:#00ff41;color:#00ff41;" onclick="setupSSL()">[ SETUP SSL / CADDY ]</button>
+    </div>
+
+    <!-- SSL instructions -->
+    <div id="ssl-instructions" style="display:none;margin-bottom:20px;padding:12px;border:1px solid var(--border);background:var(--bg2);font-size:10px;color:var(--green-dim);line-height:1.8;">
+      <div style="color:var(--green);letter-spacing:2px;margin-bottom:8px;">// SSL SETUP COMMAND</div>
+      <div style="font-size:9px;margin-bottom:8px;">Run this on your server to install Caddy and enable HTTPS:</div>
+      <pre id="ssl-command" style="background:#000;padding:10px;color:#00ff41;font-size:10px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;border:1px solid var(--border);"></pre>
+      <button class="copy-btn" style="margin-top:8px;" onclick="copyText(document.getElementById('ssl-command').textContent)">COPY COMMAND</button>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;">
+      <button class="btn btn-sm btn-danger" onclick="closeSettings()">[ CLOSE ]</button>
+    </div>
   </div>
 </div>
 
@@ -958,6 +1007,7 @@
       const r = await apiFetch('/api/license');
       if (!r.ok) return;
       const d = await r.json();
+      _licenseState = d;
       const card = document.getElementById('license-card');
       const stat = document.getElementById('stat-license');
       const banner = document.getElementById('license-banner');
@@ -1562,6 +1612,69 @@
     closeIG();
     refreshAll();
   }
+
+  // --- SETTINGS ---
+  async function openSettings() {
+    document.getElementById('settings-overlay').style.display = 'flex';
+    try {
+      const r = await apiFetch('/api/config');
+      if (!r.ok) return;
+      const d = await r.json();
+      document.getElementById('cfg-public-url').textContent = d.publicUrl || '--';
+      document.getElementById('cfg-server-ip').textContent = d.serverIp || '--';
+      document.getElementById('dns-ip').textContent = d.serverIp || '--';
+      document.getElementById('settings-domain').value = d.domain || '';
+      const lic = getLicenseState();
+      document.getElementById('cfg-license').textContent = lic.valid ? `${lic.plan || 'valid'} · ${lic.streams} stream(s)` : 'INVALID';
+    } catch {}
+  }
+
+  function closeSettings() {
+    document.getElementById('settings-overlay').style.display = 'none';
+  }
+
+  async function saveDomain() {
+    const domain = document.getElementById('settings-domain').value.trim();
+    if (!domain) { notify('DOMAIN REQUIRED', true); return; }
+    const r = await apiFetch('/api/config/domain', { method: 'POST', body: JSON.stringify({ domain }) });
+    const d = await r.json();
+    if (!r.ok) { notify('ERROR: ' + d.error, true); return; }
+    notify(`DOMAIN SAVED — PUBLIC URL: ${d.publicUrl}`);
+    document.getElementById('cfg-public-url').textContent = d.publicUrl;
+    // Show SSL instructions
+    showSSLInstructions(domain);
+  }
+
+  function showSSLInstructions(domain) {
+    const ip = document.getElementById('dns-ip').textContent;
+    const cmd = `# Install Caddy (if not already installed)
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt-get update && sudo apt-get install -y caddy
+
+# Write Caddyfile
+sudo tee /etc/caddy/Caddyfile > /dev/null <<'EOF'
+${domain} {
+    reverse_proxy localhost:3000
+}
+EOF
+
+# Restart Caddy (auto-gets Let's Encrypt cert)
+sudo systemctl restart caddy
+sudo systemctl enable caddy`;
+    document.getElementById('ssl-command').textContent = cmd;
+    document.getElementById('ssl-instructions').style.display = 'block';
+  }
+
+  function setupSSL() {
+    const domain = document.getElementById('settings-domain').value.trim();
+    if (!domain) { notify('SAVE A DOMAIN FIRST', true); return; }
+    showSSLInstructions(domain);
+  }
+
+  // Expose licenseState for settings modal
+  let _licenseState = {};
+  function getLicenseState() { return _licenseState; }
 
   // --- CREATE MODAL: mode toggle ---
   function onModeChange() {
