@@ -14,6 +14,7 @@ function startApp() {
   const statsRouter = require('./routes/stats');
   const { requireAuth } = require('./middleware/auth');
   const { addPath, listPaths } = require('./services/mediamtxClient');
+  const { withPlanLimits } = require('./services/mediamtxPathConfig');
   const { startLicenseWatchdog, getState: getLicenseState, requireLicense, checkLicense } = require('./services/licenseGuard');
   const { getConfig, setConfig } = require('./bootstrap');
 
@@ -246,7 +247,7 @@ async function tryWebRTC(){
     for (const ep of endpoints) {
       try {
         const conf = ep.source_mode === 'pull' && ep.source_url ? { source: ep.source_url } : {};
-        await addPath(ep.name, conf);
+        await addPath(ep.name, withPlanLimits(getLicenseState().plan, conf));
       } catch {}
     }
     console.log(`[sync] registered ${endpoints.length} path(s) with mediamtx`);

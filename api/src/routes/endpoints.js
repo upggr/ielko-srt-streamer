@@ -6,6 +6,7 @@ const db = require('../db');
 const { addPath, removePath, getPathStatus } = require('../services/mediamtxClient');
 const { getLogs, startYouTube, stopYouTube, startFacebook, stopFacebook, startInstagram, stopInstagram, startTranscode, stopTranscode } = require('../services/ffmpegManager');
 const { getState: getLicenseState } = require('../services/licenseGuard');
+const { withPlanLimits } = require('../services/mediamtxPathConfig');
 
 const router = Router();
 const SERVER_IP = process.env.SERVER_IP || '88.198.184.233';
@@ -77,7 +78,7 @@ router.post('/', async (req, res) => {
   // Register path in mediamtx — pull mode sets source URL so mediamtx fetches automatically
   try {
     const pathConf = mode === 'pull' ? { source: sourceUrl } : {};
-    await addPath(slugName, pathConf);
+    await addPath(slugName, withPlanLimits(getLicenseState().plan, pathConf));
   } catch (e) {
     console.error('mediamtx addPath error:', e.message);
   }
@@ -92,7 +93,7 @@ router.post('/:id/start', async (req, res) => {
   if (!ep) { res.status(404).json({ error: 'Not found' }); return; }
   // With mediamtx, "starting" means registering the path and marking as ready
   try {
-    await addPath(ep.name, {});
+    await addPath(ep.name, withPlanLimits(getLicenseState().plan, {}));
   } catch (e) {
     // May already exist — that's fine
   }
@@ -207,7 +208,7 @@ router.post('/:id/pull/update', async (req, res) => {
   db.prepare("UPDATE endpoints SET source_mode='pull', source_url=? WHERE id=?").run(sourceUrl, ep.id);
   try {
     await removePath(ep.name);
-    await addPath(ep.name, { source: sourceUrl });
+    await addPath(ep.name, withPlanLimits(getLicenseState().plan, { source: sourceUrl }));
   } catch (e) { console.error('mediamtx pull update error:', e.message); }
   res.json({ ok: true, source_url: sourceUrl });
 });
@@ -218,7 +219,7 @@ router.post('/:id/pull/disable', async (req, res) => {
   db.prepare("UPDATE endpoints SET source_mode='push', source_url=NULL WHERE id=?").run(ep.id);
   try {
     await removePath(ep.name);
-    await addPath(ep.name, {});
+    await addPath(ep.name, withPlanLimits(getLicenseState().plan, {}));
   } catch (e) { console.error('mediamtx pull disable error:', e.message); }
   res.json({ ok: true });
 });

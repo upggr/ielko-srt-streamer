@@ -2,6 +2,7 @@
 const https = require('https');
 const http = require('http');
 const { removePath, addPath, listPaths } = require('./mediamtxClient');
+const { withPlanLimits } = require('./mediamtxPathConfig');
 const { stopYouTube, stopFacebook, stopInstagram, stopTranscode } = require('./ffmpegManager');
 const db = require('../db');
 
@@ -90,15 +91,20 @@ async function killAllStreaming() {
   db.prepare("UPDATE endpoints SET status='stopped' WHERE status='running'").run();
 }
 
-async function restoreStreaming() {
-  console.log('[license] License valid — restoring mediamtx paths');
+async function reapplyAllMediamtxPaths() {
   const endpoints = db.prepare('SELECT * FROM endpoints').all();
+  const plan = licenseState.plan;
   for (const ep of endpoints) {
     try {
       const conf = ep.source_mode === 'pull' && ep.source_url ? { source: ep.source_url } : {};
-      await addPath(ep.name, conf);
+      await addPath(ep.name, withPlanLimits(plan, conf));
     } catch {}
   }
+}
+
+async function restoreStreaming() {
+  console.log('[license] License valid — restoring mediamtx paths');
+  await reapplyAllMediamtxPaths();
 }
 
 let wasValid = null; // track transitions
@@ -107,6 +113,7 @@ async function checkLicense() {
   if (licenseState.checking) return;
   licenseState.checking = true;
 
+  const previousPlan = licenseState.plan;
   const result = await fetchLicenseCheck();
   const nowValid = result.valid === true;
 
@@ -133,6 +140,9 @@ async function checkLicense() {
   } else if (nowValid && wasValid === false) {
     // Transition: invalid → valid — restore paths
     await restoreStreaming();
+  } else if (nowValid && wasValid !== false && (result.plan || null) !== (previousPlan || null)) {
+    console.log('[license] plan changed — updating mediamtx path limits');
+    await reapplyAllMediamtxPaths();
   }
 
   wasValid = nowValid;
