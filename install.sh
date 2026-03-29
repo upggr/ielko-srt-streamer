@@ -42,8 +42,12 @@ fi
 
 # 4. Write .env
 echo "[4/5] Writing .env..."
+ICECAST_SOURCE_PASSWORD=$(cat /proc/sys/kernel/random/uuid 2>/dev/null | tr -d '-' | head -c 16 || openssl rand -hex 8)
+ICECAST_ADMIN_PASSWORD=$(cat /proc/sys/kernel/random/uuid 2>/dev/null | tr -d '-' | head -c 16 || openssl rand -hex 8)
 cat > "$INSTALL_DIR/.env" <<EOF
 LICENSE_KEY=$LICENSE_KEY
+ICECAST_SOURCE_PASSWORD=$ICECAST_SOURCE_PASSWORD
+ICECAST_ADMIN_PASSWORD=$ICECAST_ADMIN_PASSWORD
 EOF
 
 # 5. Start containers
