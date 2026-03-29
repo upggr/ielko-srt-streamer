@@ -51,4 +51,10 @@
   <security>
     <chroot>0</chroot>
   </security>
+
+  <!-- Keep process in foreground for Docker -->
+  <changeowner>
+    <user>icecast2</user>
+    <group>icecast</group>
+  </changeowner>
 </icecast>

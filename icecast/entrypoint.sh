@@ -21,7 +21,5 @@ echo "[icecast] source-password: $ICECAST_SOURCE_PASSWORD"
 echo "[icecast] admin-password:  $ICECAST_ADMIN_PASSWORD"
 echo "[icecast] hostname:        ${ICECAST_HOSTNAME:-localhost}"
 
-# Run as icecast2 user to satisfy icecast's root-check
-exec su-exec icecast2 icecast2 -c /etc/icecast2/icecast.xml 2>/dev/null || \
-  exec gosu icecast2 icecast2 -c /etc/icecast2/icecast.xml 2>/dev/null || \
-  exec icecast2 -c /etc/icecast2/icecast.xml
+# Run as icecast2 user, foreground (-d 0 disables daemonize)
+exec gosu icecast2 icecast2 -c /etc/icecast2/icecast.xml -d 0
