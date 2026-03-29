@@ -14,8 +14,13 @@ services:
       # Optional overrides — auto-generated on first boot if not set
       - APP_PASSWORD=${APP_PASSWORD:-}
       - SESSION_SECRET=${SESSION_SECRET:-}
+      # Host .env from dashboard install sets these — must be forwarded into the container
+      # so bootstrap can set PUBLIC_URL / domain / ssl (Caddy hostname is not visible to Node otherwise).
+      - PUBLIC_HOST=${PUBLIC_HOST:-}
       - PUBLIC_URL=${PUBLIC_URL:-}
       - SERVER_IP=${SERVER_IP:-}
+      - TRUST_PROXY=${TRUST_PROXY:-}
+      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL:-}
       - MEDIAMTX_API=http://mediamtx:9997
       - MEDIAMTX_HLS=http://mediamtx:8888
       - LICENSE_KEY=${LICENSE_KEY}
