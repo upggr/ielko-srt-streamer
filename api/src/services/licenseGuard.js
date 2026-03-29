@@ -5,11 +5,19 @@ const { removePath, addPath, listPaths } = require('./mediamtxClient');
 const { stopYouTube, stopFacebook, stopInstagram, stopTranscode } = require('./ffmpegManager');
 const db = require('../db');
 
-const LICENSE_VALIDATE_URL = process.env.LICENSE_VALIDATE_URL || 'https://services.buy-it.gr/api/license/validate';
-const LICENSE_KEY = process.env.LICENSE_KEY || '';
-const SERVER_IP = process.env.SERVER_IP || '';
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const BUILD_SHA = process.env.BUILD_SHA || 'dev';
+
+/** Read on each check so .env/bootstrap updates apply without stale module constants. */
+function licenseValidateUrlNow() {
+  return (process.env.LICENSE_VALIDATE_URL || 'https://services.buy-it.gr/api/license/validate').trim();
+}
+function licenseKeyNow() {
+  return String(process.env.LICENSE_KEY || '').trim();
+}
+function serverIpNow() {
+  return String(process.env.SERVER_IP || '').trim();
+}
 
 // In-memory license state — source of truth for the running process
 let licenseState = {
@@ -28,14 +36,16 @@ function getState() { return { ...licenseState }; }
 
 function fetchLicenseCheck() {
   return new Promise((resolve) => {
-    if (!LICENSE_KEY) {
+    const key = licenseKeyNow();
+    if (!key) {
       resolve({ valid: false, reason: 'No LICENSE_KEY configured' });
       return;
     }
 
-    const url = new URL(LICENSE_VALIDATE_URL);
-    url.searchParams.set('key', LICENSE_KEY);
-    if (SERVER_IP) url.searchParams.set('ip', SERVER_IP);
+    const url = new URL(licenseValidateUrlNow());
+    url.searchParams.set('key', key);
+    const sip = serverIpNow();
+    if (sip && sip !== '0.0.0.0') url.searchParams.set('ip', sip);
 
     const lib = url.protocol === 'https:' ? https : http;
     const req = lib.get(url.toString(), { timeout: 10000 }, (res) => {
