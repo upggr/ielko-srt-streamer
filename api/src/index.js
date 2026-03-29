@@ -247,7 +247,8 @@ async function tryWebRTC(){
     for (const ep of endpoints) {
       try {
         const conf = ep.source_mode === 'pull' && ep.source_url ? { source: ep.source_url } : {};
-        await addPath(ep.name, withPlanLimits(getLicenseState().plan, conf));
+        const auth = { protocol: ep.protocol, mode: ep.source_mode, srtPassword: ep.srt_password, rtmpPassword: ep.rtmp_password };
+        await addPath(ep.name, withPlanLimits(getLicenseState().plan, conf, auth));
       } catch {}
     }
     console.log(`[sync] registered ${endpoints.length} path(s) with mediamtx`);

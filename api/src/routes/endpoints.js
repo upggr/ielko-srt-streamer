@@ -14,10 +14,15 @@ const PUBLIC_URL = process.env.PUBLIC_URL || 'https://streams.ioniantv.gr';
 const SRT_PORT = 8890;
 const RTMP_PORT = 1935;
 
-function buildUrls(protocol, name, srtPassword, transcodeEnabled) {
+function buildUrls(protocol, name, srtPassword, transcodeEnabled, rtmpPassword) {
   let senderUrl;
   if (protocol === 'srt') {
-    senderUrl = `srt://${SERVER_IP}:${SRT_PORT}?streamid=publish:${name}&latency=200`;
+    // SRT passphrase is set as a path-level srtPublishPassphrase in MediaMTX.
+    // Encoders (OBS, vMix, ffmpeg) supply it via the passphrase/pbkeylen SRT parameters.
+    const passphraseParam = srtPassword ? `&passphrase=${encodeURIComponent(srtPassword)}&pbkeylen=16` : '';
+    senderUrl = `srt://${SERVER_IP}:${SRT_PORT}?streamid=publish:${name}&latency=200${passphraseParam}`;
+  } else if (rtmpPassword) {
+    senderUrl = `rtmp://stream:${rtmpPassword}@${SERVER_IP}:${RTMP_PORT}/${name}`;
   } else {
     senderUrl = `rtmp://${SERVER_IP}:${RTMP_PORT}/${name}`;
   }
@@ -45,7 +50,7 @@ function buildUrls(protocol, name, srtPassword, transcodeEnabled) {
 
 router.get('/', (req, res) => {
   const rows = db.prepare('SELECT * FROM endpoints ORDER BY created_at DESC').all();
-  res.json(rows.map(r => ({ ...r, ...buildUrls(r.protocol, r.name, r.srt_password, r.transcode_enabled) })));
+  res.json(rows.map(r => ({ ...r, ...buildUrls(r.protocol, r.name, r.srt_password, r.transcode_enabled, r.rtmp_password) })));
 });
 
 router.post('/', async (req, res) => {
@@ -74,18 +79,20 @@ router.post('/', async (req, res) => {
 
   const id = uuidv4();
   const srtPassword = protocol === 'srt' && mode === 'push' ? crypto.randomBytes(8).toString('hex') : null;
+  const rtmpPassword = protocol === 'rtmp' && mode === 'push' ? crypto.randomBytes(8).toString('hex') : null;
 
   // Register path in mediamtx — pull mode sets source URL so mediamtx fetches automatically
   try {
     const pathConf = mode === 'pull' ? { source: sourceUrl } : {};
-    await addPath(slugName, withPlanLimits(getLicenseState().plan, pathConf));
+    const auth = { protocol, mode, srtPassword, rtmpPassword };
+    await addPath(slugName, withPlanLimits(getLicenseState().plan, pathConf, auth));
   } catch (e) {
     console.error('mediamtx addPath error:', e.message);
   }
 
-  db.prepare('INSERT INTO endpoints (id, name, protocol, port, srt_password, status, source_mode, source_url) VALUES (?, ?, ?, 0, ?, \'stopped\', ?, ?)').run(id, slugName, protocol, srtPassword, mode, sourceUrl || null);
+  db.prepare('INSERT INTO endpoints (id, name, protocol, port, srt_password, rtmp_password, status, source_mode, source_url) VALUES (?, ?, ?, 0, ?, ?, \'stopped\', ?, ?)').run(id, slugName, protocol, srtPassword, rtmpPassword, mode, sourceUrl || null);
   const ep = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(id);
-  res.status(201).json({ ...ep, ...buildUrls(protocol, slugName, srtPassword, ep.transcode_enabled) });
+  res.status(201).json({ ...ep, ...buildUrls(protocol, slugName, srtPassword, ep.transcode_enabled, rtmpPassword) });
 });
 
 router.post('/:id/start', async (req, res) => {
@@ -93,7 +100,8 @@ router.post('/:id/start', async (req, res) => {
   if (!ep) { res.status(404).json({ error: 'Not found' }); return; }
   // With mediamtx, "starting" means registering the path and marking as ready
   try {
-    await addPath(ep.name, withPlanLimits(getLicenseState().plan, {}));
+    const auth = { protocol: ep.protocol, mode: ep.source_mode, srtPassword: ep.srt_password, rtmpPassword: ep.rtmp_password };
+    await addPath(ep.name, withPlanLimits(getLicenseState().plan, {}, auth));
   } catch (e) {
     // May already exist — that's fine
   }
@@ -208,7 +216,8 @@ router.post('/:id/pull/update', async (req, res) => {
   db.prepare("UPDATE endpoints SET source_mode='pull', source_url=? WHERE id=?").run(sourceUrl, ep.id);
   try {
     await removePath(ep.name);
-    await addPath(ep.name, withPlanLimits(getLicenseState().plan, { source: sourceUrl }));
+    // pull mode has no publish auth — source is fetched by mediamtx itself
+    await addPath(ep.name, withPlanLimits(getLicenseState().plan, { source: sourceUrl }, { protocol: ep.protocol, mode: 'pull' }));
   } catch (e) { console.error('mediamtx pull update error:', e.message); }
   res.json({ ok: true, source_url: sourceUrl });
 });
@@ -219,7 +228,8 @@ router.post('/:id/pull/disable', async (req, res) => {
   db.prepare("UPDATE endpoints SET source_mode='push', source_url=NULL WHERE id=?").run(ep.id);
   try {
     await removePath(ep.name);
-    await addPath(ep.name, withPlanLimits(getLicenseState().plan, {}));
+    const auth = { protocol: ep.protocol, mode: 'push', srtPassword: ep.srt_password, rtmpPassword: ep.rtmp_password };
+    await addPath(ep.name, withPlanLimits(getLicenseState().plan, {}, auth));
   } catch (e) { console.error('mediamtx pull disable error:', e.message); }
   res.json({ ok: true });
 });

@@ -71,5 +71,6 @@ if (!existingCols.includes('icecast_url'))        db.exec("ALTER TABLE endpoints
 if (!existingCols.includes('icecast_mount'))      db.exec("ALTER TABLE endpoints ADD COLUMN icecast_mount TEXT");
 if (!existingCols.includes('icecast_user'))       db.exec("ALTER TABLE endpoints ADD COLUMN icecast_user TEXT");
 if (!existingCols.includes('icecast_password'))   db.exec("ALTER TABLE endpoints ADD COLUMN icecast_password TEXT");
+if (!existingCols.includes('rtmp_password'))      db.exec("ALTER TABLE endpoints ADD COLUMN rtmp_password TEXT");
 
 module.exports = db;

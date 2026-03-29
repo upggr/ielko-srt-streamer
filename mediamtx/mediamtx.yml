@@ -19,15 +19,15 @@ srtAddress: :8890
 
 rtmpAddress: :1935
 
-# Allow any user to publish, read, and use the API without auth
+# Viewers (HLS, WebRTC, SRT pull) need no credentials.
+# Publishers must supply per-path credentials set by the API (srtPublishPassphrase / publishUser+publishPass).
+# The API itself authenticates via the internal network (not exposed publicly).
 authMethod: internal
 authInternalUsers:
   - user: any
     pass:
     ips: []
     permissions:
-      - action: publish
-        path:
       - action: read
         path:
       - action: playback
