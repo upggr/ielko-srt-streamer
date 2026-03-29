@@ -9,6 +9,7 @@ const endpointsRouter = require('./routes/endpoints');
 const statsRouter = require('./routes/stats');
 const { requireAuth } = require('./middleware/auth');
 const { addPath, listPaths } = require('./services/mediamtxClient');
+const { startLicenseWatchdog, getState: getLicenseState, requireLicense, checkLicense } = require('./services/licenseGuard');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000');
@@ -19,8 +20,19 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'ui')));
 
 app.use('/api/auth', authRouter);
-app.use('/api/endpoints', requireAuth, endpointsRouter);
+app.use('/api/endpoints', requireAuth, requireLicense, endpointsRouter);
 app.use('/api/stats', requireAuth, statsRouter);
+
+// License status — readable by UI without streaming auth
+app.get('/api/license', requireAuth, (req, res) => {
+  res.json(getLicenseState());
+});
+
+// Manual re-check trigger
+app.post('/api/license/recheck', requireAuth, async (req, res) => {
+  await checkLicense();
+  res.json(getLicenseState());
+});
 
 // Proxy HLS: ABR (master.m3u8 / v0..v2) served from nginx, passthrough from mediamtx
 app.use('/hls', (req, res, next) => {
@@ -134,4 +146,5 @@ app.listen(PORT, async () => {
   console.log(`SRT Streamer API listening on port ${PORT}`);
   setTimeout(syncPaths, 3000);
   setInterval(watchdogTick, 10000);
+  startLicenseWatchdog();
 });

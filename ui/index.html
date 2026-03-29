@@ -627,6 +627,17 @@
       <div class="stat-label">Memory</div>
       <div class="stat-value small" id="stat-mem">--</div>
     </div>
+    <div class="stat-card" id="license-card" style="border-color:#555;cursor:pointer;" onclick="recheckLicense()" title="Click to re-check license">
+      <div class="stat-label">License</div>
+      <div class="stat-value small" id="stat-license" style="color:#555;">CHECKING</div>
+    </div>
+  </div>
+
+  <!-- LICENSE BANNER (shown when invalid) -->
+  <div id="license-banner" style="display:none;margin:0 0 16px 0;padding:14px 20px;border:1px solid #ff4444;background:rgba(255,68,68,0.08);color:#ff4444;font-size:11px;letter-spacing:2px;display:none;align-items:center;gap:12px;">
+    <span style="font-size:16px;">⛔</span>
+    <span>LICENSE INVALID — STREAMING BLOCKED. <span id="license-reason" style="opacity:0.7;"></span></span>
+    <span style="margin-left:auto;font-size:9px;opacity:0.6;">Visit services.buy-it.gr to manage your license</span>
   </div>
 
   <!-- ENDPOINTS -->
@@ -938,9 +949,42 @@
   }
 
   async function refreshAll() {
-    await Promise.all([refreshStats(), refreshEndpoints()]);
-    // After endpoints render, update live bitrate badges
+    await Promise.all([refreshStats(), refreshEndpoints(), refreshLicense()]);
     updateBitrateBadges();
+  }
+
+  async function refreshLicense() {
+    try {
+      const r = await apiFetch('/api/license');
+      if (!r.ok) return;
+      const d = await r.json();
+      const card = document.getElementById('license-card');
+      const stat = document.getElementById('stat-license');
+      const banner = document.getElementById('license-banner');
+      const reasonEl = document.getElementById('license-reason');
+      if (d.valid) {
+        stat.textContent = d.plan ? d.plan.toUpperCase() : 'VALID';
+        stat.style.color = 'var(--green)';
+        card.style.borderColor = 'var(--green)';
+        banner.style.display = 'none';
+      } else {
+        stat.textContent = 'INVALID';
+        stat.style.color = '#ff4444';
+        card.style.borderColor = '#ff4444';
+        reasonEl.textContent = d.reason || '';
+        banner.style.display = 'flex';
+      }
+    } catch {}
+  }
+
+  async function recheckLicense() {
+    document.getElementById('stat-license').textContent = 'CHECKING...';
+    try {
+      const r = await apiFetch('/api/license/recheck', { method: 'POST' });
+      const d = await r.json();
+      notify(d.valid ? `LICENSE OK — ${d.plan || 'valid'} · ${d.streams} stream(s)` : `LICENSE INVALID: ${d.reason}`, !d.valid);
+    } catch {}
+    await refreshLicense();
   }
 
   async function updateBitrateBadges() {

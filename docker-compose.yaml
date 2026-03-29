@@ -15,6 +15,8 @@ services:
       - SERVER_IP=${SERVER_IP:-88.198.184.233}
       - MEDIAMTX_API=http://mediamtx:9997
       - MEDIAMTX_HLS=http://mediamtx:8888
+      - LICENSE_KEY=${LICENSE_KEY}
+      - LICENSE_VALIDATE_URL=${LICENSE_VALIDATE_URL:-https://services.buy-it.gr/api/license/validate}
     volumes:
       - db_data:/data
       - hls_data:/hls
