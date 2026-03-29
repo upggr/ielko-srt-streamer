@@ -9,10 +9,11 @@ services:
       - PORT=3000
       - DB_PATH=/data/streams.db
       - HLS_DIR=/hls
-      - APP_PASSWORD=${APP_PASSWORD}
-      - SESSION_SECRET=${SESSION_SECRET}
-      - PUBLIC_URL=${PUBLIC_URL:-https://streams.ioniantv.gr}
-      - SERVER_IP=${SERVER_IP:-88.198.184.233}
+      # Optional overrides — auto-generated on first boot if not set
+      - APP_PASSWORD=${APP_PASSWORD:-}
+      - SESSION_SECRET=${SESSION_SECRET:-}
+      - PUBLIC_URL=${PUBLIC_URL:-}
+      - SERVER_IP=${SERVER_IP:-}
       - MEDIAMTX_API=http://mediamtx:9997
       - MEDIAMTX_HLS=http://mediamtx:8888
       - LICENSE_KEY=${LICENSE_KEY}
