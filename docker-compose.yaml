@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: api/Dockerfile
+      args:
+        BUILD_SHA: ${BUILD_SHA:-dev}
     ports:
       - "3000:3000"
     environment:
@@ -21,6 +23,7 @@ services:
     volumes:
       - db_data:/data
       - hls_data:/hls
+      - .:/repo                          # repo root for self-update (writes update.flag)
     depends_on:
       - mediamtx
       - hls-nginx

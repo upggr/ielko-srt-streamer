@@ -20,7 +20,9 @@ COPY ui ./ui
 
 RUN mkdir -p /data
 
+ARG BUILD_SHA=dev
 ENV NODE_ENV=production
+ENV BUILD_SHA=$BUILD_SHA
 EXPOSE 3000
 
 CMD ["node", "src/index.js"]

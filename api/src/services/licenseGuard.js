@@ -9,6 +9,7 @@ const LICENSE_VALIDATE_URL = process.env.LICENSE_VALIDATE_URL || 'https://servic
 const LICENSE_KEY = process.env.LICENSE_KEY || '';
 const SERVER_IP = process.env.SERVER_IP || '';
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const BUILD_SHA = process.env.BUILD_SHA || 'dev';
 
 // In-memory license state — source of truth for the running process
 let licenseState = {
@@ -18,6 +19,9 @@ let licenseState = {
   reason: 'Not checked yet',
   lastChecked: null,
   checking: false,
+  currentVersion: BUILD_SHA,
+  latestVersion: null,
+  updateAvailable: false,
 };
 
 function getState() { return { ...licenseState }; }
@@ -96,6 +100,9 @@ async function checkLicense() {
   const result = await fetchLicenseCheck();
   const nowValid = result.valid === true;
 
+  const latestVersion = result.latestVersion || null;
+  const updateAvailable = !!(latestVersion && latestVersion !== BUILD_SHA && BUILD_SHA !== 'dev');
+
   licenseState = {
     valid: nowValid,
     plan: result.plan || null,
@@ -103,9 +110,12 @@ async function checkLicense() {
     reason: result.reason || null,
     lastChecked: new Date().toISOString(),
     checking: false,
+    currentVersion: BUILD_SHA,
+    latestVersion,
+    updateAvailable,
   };
 
-  console.log(`[license] check: valid=${nowValid} plan=${result.plan || '-'} streams=${result.streams || 0}${result.reason ? ' reason=' + result.reason : ''}`);
+  console.log(`[license] check: valid=${nowValid} plan=${result.plan || '-'} streams=${result.streams || 0}${result.reason ? ' reason=' + result.reason : ''}${updateAvailable ? ` UPDATE AVAILABLE: ${latestVersion}` : ''}`);
 
   if (!nowValid && wasValid !== false) {
     // Transition: valid → invalid (or first check invalid)

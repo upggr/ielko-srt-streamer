@@ -641,6 +641,12 @@
     <span style="margin-left:auto;font-size:9px;opacity:0.6;">Visit services.buy-it.gr to manage your license</span>
   </div>
 
+  <!-- UPDATE BANNER (shown when update available) -->
+  <div id="update-banner" style="display:none;margin:0 0 16px 0;padding:14px 20px;border:1px solid #ffaa00;background:rgba(255,170,0,0.07);color:#ffaa00;font-size:11px;letter-spacing:2px;align-items:center;gap:12px;">
+    <span>↑ UPDATE AVAILABLE — <span id="update-version" style="opacity:0.8;"></span></span>
+    <button class="btn btn-sm" style="margin-left:auto;border-color:#ffaa00;color:#ffaa00;" onclick="openSettings()">[ UPDATE NOW ]</button>
+  </div>
+
   <!-- ENDPOINTS -->
   <div class="section">
     <div class="section-header">
@@ -669,6 +675,18 @@
       <div>PUBLIC URL: <span id="cfg-public-url" style="color:var(--green);">--</span></div>
       <div>SERVER IP: <span id="cfg-server-ip" style="color:var(--green);">--</span></div>
       <div>LICENSE: <span id="cfg-license" style="color:var(--green);">--</span></div>
+      <div>VERSION: <span id="cfg-version" style="color:var(--green);">--</span></div>
+    </div>
+
+    <!-- Update section -->
+    <div id="update-section" style="display:none;margin-bottom:24px;">
+      <div style="font-size:10px;color:var(--green-dim);margin-bottom:12px;letter-spacing:2px;border-bottom:1px solid var(--border);padding-bottom:8px;">SOFTWARE UPDATE</div>
+      <div style="padding:12px;border:1px solid #ffaa00;background:rgba(255,170,0,0.05);font-size:10px;color:#ffaa00;line-height:1.8;margin-bottom:12px;">
+        <div>Current: <span id="upd-current" style="color:#fff;"></span></div>
+        <div>Latest:&nbsp; <span id="upd-latest" style="color:#fff;"></span></div>
+      </div>
+      <button class="btn btn-sm" id="upd-btn" style="border-color:#ffaa00;color:#ffaa00;" onclick="runUpdate()">[ APPLY UPDATE ]</button>
+      <div id="upd-log" style="display:none;margin-top:12px;padding:10px;background:#000;font-size:10px;color:var(--green-dim);font-family:monospace;border:1px solid var(--border);line-height:1.6;"></div>
     </div>
 
     <!-- Domain section -->
@@ -1023,6 +1041,13 @@
         card.style.borderColor = '#ff4444';
         reasonEl.textContent = d.reason || '';
         banner.style.display = 'flex';
+      }
+      const updBanner = document.getElementById('update-banner');
+      if (d.updateAvailable && d.latestVersion) {
+        document.getElementById('update-version').textContent = `latest: ${d.latestVersion} (current: ${d.currentVersion || 'dev'})`;
+        updBanner.style.display = 'flex';
+      } else {
+        updBanner.style.display = 'none';
       }
     } catch {}
   }
@@ -1626,7 +1651,39 @@
       document.getElementById('settings-domain').value = d.domain || '';
       const lic = getLicenseState();
       document.getElementById('cfg-license').textContent = lic.valid ? `${lic.plan || 'valid'} · ${lic.streams} stream(s)` : 'INVALID';
+      document.getElementById('cfg-version').textContent = lic.currentVersion || 'dev';
+      const updateSection = document.getElementById('update-section');
+      if (lic.updateAvailable && lic.latestVersion) {
+        document.getElementById('upd-current').textContent = lic.currentVersion || 'dev';
+        document.getElementById('upd-latest').textContent = lic.latestVersion;
+        updateSection.style.display = 'block';
+      } else {
+        updateSection.style.display = 'none';
+      }
     } catch {}
+  }
+
+  async function runUpdate() {
+    const btn = document.getElementById('upd-btn');
+    const log = document.getElementById('upd-log');
+    btn.disabled = true;
+    btn.textContent = '[ UPDATING... ]';
+    log.style.display = 'block';
+    log.textContent = 'Sending update request...';
+    try {
+      const r = await apiFetch('/api/update', { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) {
+        log.textContent = 'ERROR: ' + (d.error || r.status);
+        btn.disabled = false; btn.textContent = '[ APPLY UPDATE ]';
+        return;
+      }
+      log.textContent = d.message + '\n\nThe container will restart automatically within ~30 seconds.\nThis page will reload.';
+      setTimeout(() => location.reload(), 35000);
+    } catch (e) {
+      log.textContent = 'Error: ' + e.message;
+      btn.disabled = false; btn.textContent = '[ APPLY UPDATE ]';
+    }
   }
 
   function closeSettings() {

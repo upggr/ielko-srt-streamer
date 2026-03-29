@@ -35,6 +35,23 @@ function startApp() {
     res.json(getLicenseState());
   });
 
+  // Version info
+  app.get('/api/version', requireAuth, (req, res) => res.json(getLicenseState()));
+
+  // Self-update: writes a flag file to /repo; host cron picks it up and runs docker compose up --build
+  app.post('/api/update', requireAuth, (req, res) => {
+    const state = getLicenseState();
+    if (!state.updateAvailable) {
+      return res.status(400).json({ error: 'No update available' });
+    }
+    try {
+      require('fs').writeFileSync('/repo/update.flag', new Date().toISOString());
+      res.json({ ok: true, message: 'Update flag written. Host will apply the update within 30 seconds and restart the container.' });
+    } catch (e) {
+      res.status(500).json({ error: 'Could not write update flag: ' + e.message });
+    }
+  });
+
   // Server config (domain, public URL) — readable/writable from UI
   app.get('/api/config', requireAuth, (req, res) => {
     res.json({
