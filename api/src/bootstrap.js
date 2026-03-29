@@ -99,11 +99,21 @@ async function bootstrap() {
     !publicHost.includes('..');
 
   if (validPublicHost) {
-    const httpsUrl = `https://${publicHost.toLowerCase()}`;
+    const host = publicHost.toLowerCase();
+    const httpsUrl = `https://${host}`;
     process.env.PUBLIC_URL = httpsUrl;
     const stored = getConfig('public_url');
     if (stored !== httpsUrl) {
       setConfig('public_url', httpsUrl);
+      changed = true;
+    }
+    const prevDomain = getConfig('domain');
+    if (prevDomain !== host) {
+      setConfig('domain', host);
+      changed = true;
+    }
+    if (getConfig('ssl_enabled') !== '1') {
+      setConfig('ssl_enabled', '1');
       changed = true;
     }
     if (!process.env.TRUST_PROXY) {

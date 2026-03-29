@@ -30,6 +30,51 @@ function startApp() {
   }
 
   app.use(express.json());
+
+  const { bearerMatchesLicenseKey } = require('./utils/licenseBearer');
+
+  // No auth — read-only; lets the dashboard show deployed SHA vs catalog.
+  app.get('/api/public/version', (req, res) => {
+    const s = getLicenseState();
+    res.json({
+      currentVersion: s.currentVersion || 'unknown',
+      latestVersion: s.latestVersion,
+      updateAvailable: !!s.updateAvailable,
+      licenseValid: !!s.valid,
+    });
+  });
+
+  // Same license Bearer as /api/auth/token; triggers host self-update (update.flag).
+  app.post('/api/license/trigger-update', async (req, res) => {
+    if (!bearerMatchesLicenseKey(req.headers.authorization, process.env.LICENSE_KEY)) {
+      return res.status(401).json({ error: 'Invalid license key' });
+    }
+    try {
+      await checkLicense();
+    } catch (err) {
+      console.error('[trigger-update] checkLicense failed', err);
+    }
+    const state = getLicenseState();
+    if (!state.updateAvailable) {
+      return res.status(400).json({
+        error: 'No update available',
+        currentVersion: state.currentVersion,
+        latestVersion: state.latestVersion,
+        licenseValid: state.valid,
+      });
+    }
+    try {
+      require('fs').writeFileSync('/repo/update.flag', new Date().toISOString());
+      res.json({
+        ok: true,
+        message:
+          'Update scheduled. The host will rebuild/restart the stack shortly; live streams may drop briefly.',
+      });
+    } catch (e) {
+      res.status(500).json({ error: 'Could not write update flag: ' + e.message });
+    }
+  });
+
   app.use(express.static(path.join(__dirname, '..', 'ui')));
 
   app.use('/api/auth', authRouter);
@@ -81,13 +126,38 @@ function startApp() {
 </script></body></html>`);
   });
 
+  function publicUrlForConfig() {
+    return process.env.PUBLIC_URL || getConfig('public_url') || null;
+  }
+
+  function hostnameFromPublicUrl(url) {
+    if (!url) return null;
+    try {
+      const u = new URL(url);
+      const h = u.hostname;
+      if (!h || /^\d+\.\d+\.\d+\.\d+$/.test(h)) return null;
+      return h.toLowerCase();
+    } catch {
+      return null;
+    }
+  }
+
   // Server config (domain, public URL) — readable/writable from UI
   app.get('/api/config', requireAuth, (req, res) => {
+    const publicUrl = publicUrlForConfig();
+    const storedDomain = (getConfig('domain') || '').trim() || null;
+    const derivedDomain = hostnameFromPublicUrl(publicUrl);
+    const domain = storedDomain || derivedDomain || null;
+    const sslFlag = getConfig('ssl_enabled') === '1';
+    const httpsPublic = !!(publicUrl && /^https:\/\//i.test(publicUrl));
+    const sslEnabled = sslFlag || httpsPublic;
     res.json({
-      publicUrl: process.env.PUBLIC_URL,
+      publicUrl,
       serverIp: process.env.SERVER_IP,
-      domain: getConfig('domain') || null,
-      sslEnabled: getConfig('ssl_enabled') === '1',
+      domain,
+      domainStored: storedDomain,
+      sslEnabled,
+      dnsHint: 'Point an A record for your hostname to this server IP, then use HTTPS (e.g. Caddy) in front of port 3000.',
     });
   });
 
@@ -99,6 +169,7 @@ function startApp() {
     setConfig('domain', domain);
     const newUrl = `https://${domain}`;
     setConfig('public_url', newUrl);
+    setConfig('ssl_enabled', '1');
     process.env.PUBLIC_URL = newUrl;
     res.json({ ok: true, publicUrl: newUrl });
   });

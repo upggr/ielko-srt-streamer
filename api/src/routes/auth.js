@@ -1,6 +1,7 @@
 'use strict';
 const { Router } = require('express');
 const crypto = require('crypto');
+const { bearerMatchesLicenseKey } = require('../utils/licenseBearer');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { getConfig, setConfig } = require('../bootstrap');
@@ -40,18 +41,9 @@ router.post('/logout', (req, res) => {
 // Called by services.buy-it.gr using LICENSE_KEY as Bearer auth
 // Returns a token valid for 5 minutes, single-use
 router.post('/token', (req, res) => {
-  const authHeader = req.headers['authorization'] || '';
-  const rawBearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-  const key = String(rawBearer).trim();
-  const licenseKey = String(process.env.LICENSE_KEY || '').trim();
-  if (!key || !licenseKey) return res.status(401).json({ error: 'Unauthorized' });
-  let match = false;
-  try {
-    const a = Buffer.from(licenseKey.padEnd(key.length, '\0'));
-    const b = Buffer.from(key.padEnd(licenseKey.length, '\0'));
-    match = crypto.timingSafeEqual(a, b) && licenseKey.length === key.length;
-  } catch {}
-  if (!match) return res.status(401).json({ error: 'Invalid license key' });
+  if (!bearerMatchesLicenseKey(req.headers['authorization'], process.env.LICENSE_KEY)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
   const ssoToken = uuidv4();
   // Store as a short-lived pending token (5 min), not yet a full session

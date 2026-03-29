@@ -673,7 +673,9 @@
     <!-- Current config display -->
     <div style="margin-bottom:20px;padding:12px;border:1px solid var(--border);background:var(--bg2);font-size:10px;color:var(--green-dim);line-height:1.8;">
       <div>PUBLIC URL: <span id="cfg-public-url" style="color:var(--green);">--</span></div>
-      <div>SERVER IP: <span id="cfg-server-ip" style="color:var(--green);">--</span></div>
+      <div>SERVER IP (DNS target): <span id="cfg-server-ip" style="color:var(--green);">--</span></div>
+      <div>HOSTNAME (for DNS): <span id="cfg-hostname" style="color:var(--green);">--</span></div>
+      <div>SSL: <span id="cfg-ssl" style="color:var(--green);">--</span></div>
       <div>LICENSE: <span id="cfg-license" style="color:var(--green);">--</span></div>
       <div>VERSION: <span id="cfg-version" style="color:var(--green);">--</span></div>
     </div>
@@ -694,12 +696,18 @@
 
     <div class="form-group">
       <div class="field-label">DOMAIN NAME</div>
-      <input type="text" id="settings-domain" placeholder="streams.example.com" autocomplete="off">
-      <div style="font-size:9px;color:var(--green-dim);margin-top:4px;letter-spacing:1px;">Without https:// — just the domain</div>
+      <input type="text" id="settings-domain" placeholder="e.g. live.example.com" autocomplete="off">
+      <div style="font-size:9px;color:var(--green-dim);margin-top:4px;letter-spacing:1px;">Without https:// — just the domain. Shown above when already configured (install or saved here).</div>
     </div>
 
-    <div style="margin-bottom:20px;padding:12px;border:1px solid #ffaa00;background:rgba(255,170,0,0.05);font-size:10px;color:#ffaa00;line-height:1.9;">
-      <div style="letter-spacing:2px;margin-bottom:8px;">// DNS SETUP REQUIRED</div>
+    <div id="dns-setup-ok" style="display:none;margin-bottom:20px;padding:12px;border:1px solid var(--green);background:rgba(0,255,65,0.06);font-size:10px;color:var(--green-dim);line-height:1.9;">
+      <div style="letter-spacing:2px;margin-bottom:8px;color:var(--green);">// DNS &amp; SSL (CURRENT)</div>
+      <div id="dns-ok-line1"></div>
+      <div id="dns-ok-line2" style="margin-top:6px;opacity:0.85;"></div>
+    </div>
+
+    <div id="dns-setup-warn" style="margin-bottom:20px;padding:12px;border:1px solid #ffaa00;background:rgba(255,170,0,0.05);font-size:10px;color:#ffaa00;line-height:1.9;">
+      <div style="letter-spacing:2px;margin-bottom:8px;">// DNS &amp; SSL — SETUP</div>
       <div>1. Point your domain A record to: <strong id="dns-ip" style="color:#fff;">--</strong></div>
       <div>2. Save the domain below</div>
       <div>3. Run SSL setup (installs Caddy as reverse proxy)</div>
@@ -1630,16 +1638,38 @@
   }
 
   // --- SETTINGS ---
+  function applyServerConfigToSettingsUi(d) {
+    document.getElementById('cfg-public-url').textContent = d.publicUrl || '--';
+    document.getElementById('cfg-server-ip').textContent = d.serverIp || '--';
+    document.getElementById('dns-ip').textContent = d.serverIp || '--';
+    const host = (d.domain || '').trim();
+    document.getElementById('settings-domain').value = host;
+    document.getElementById('cfg-hostname').textContent = host || '— (not set)';
+    const sslOn = !!d.sslEnabled;
+    document.getElementById('cfg-ssl').textContent = sslOn
+      ? 'HTTPS — reverse proxy (e.g. Caddy) terminates TLS in front of this UI'
+      : 'HTTP only — set hostname + Caddy/Let\'s Encrypt for HTTPS';
+    const okBox = document.getElementById('dns-setup-ok');
+    const warnBox = document.getElementById('dns-setup-warn');
+    if (sslOn && host) {
+      warnBox.style.display = 'none';
+      okBox.style.display = 'block';
+      document.getElementById('dns-ok-line1').textContent =
+        'Public URL is ' + (d.publicUrl || 'https://' + host) + '.';
+      document.getElementById('dns-ok-line2').textContent =
+        'DNS: A record for ' + host + ' → ' + (d.serverIp || '?') + '. If the site already loads over HTTPS, you are set.';
+    } else {
+      okBox.style.display = 'none';
+      warnBox.style.display = 'block';
+    }
+  }
+
   async function openSettings() {
     document.getElementById('settings-overlay').style.display = 'flex';
     try {
       const r = await apiFetch('/api/config');
       if (!r.ok) return;
-      const d = await r.json();
-      document.getElementById('cfg-public-url').textContent = d.publicUrl || '--';
-      document.getElementById('cfg-server-ip').textContent = d.serverIp || '--';
-      document.getElementById('dns-ip').textContent = d.serverIp || '--';
-      document.getElementById('settings-domain').value = d.domain || '';
+      applyServerConfigToSettingsUi(await r.json());
       const lic = getLicenseState();
       document.getElementById('cfg-license').textContent = lic.valid ? `${lic.plan || 'valid'} · ${lic.streams} stream(s)` : 'INVALID';
       document.getElementById('cfg-version').textContent = lic.currentVersion || 'dev';
@@ -1688,8 +1718,10 @@
     const d = await r.json();
     if (!r.ok) { notify('ERROR: ' + d.error, true); return; }
     notify(`DOMAIN SAVED — PUBLIC URL: ${d.publicUrl}`);
-    document.getElementById('cfg-public-url').textContent = d.publicUrl;
-    // Show SSL instructions
+    try {
+      const r2 = await apiFetch('/api/config');
+      if (r2.ok) applyServerConfigToSettingsUi(await r2.json());
+    } catch (_) {}
     showSSLInstructions(domain);
   }
 
