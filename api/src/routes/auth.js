@@ -36,54 +36,52 @@ router.post('/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-// One-time setup token exchange — used by services.buy-it.gr to auto-login on first visit
-// Returns a session token if the setup token is valid and unused, then invalidates it
-router.post('/setup', (req, res) => {
-  const { setupToken } = req.body;
-  if (!setupToken || typeof setupToken !== 'string') {
-    return res.status(400).json({ error: 'setupToken required' });
-  }
-
-  const stored = getConfig('setup_token');
-  const used = getConfig('setup_token_used');
-
-  if (!stored || used === '1') {
-    return res.status(410).json({ error: 'Setup token already used or not available' });
-  }
-
-  // Constant-time compare
+// POST /api/auth/token — generate a fresh short-lived SSO token
+// Called by services.buy-it.gr using LICENSE_KEY as Bearer auth
+// Returns a token valid for 5 minutes, single-use
+router.post('/token', (req, res) => {
+  const authHeader = req.headers['authorization'] || '';
+  const key = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  const licenseKey = process.env.LICENSE_KEY || '';
+  if (!key || !licenseKey) return res.status(401).json({ error: 'Unauthorized' });
   let match = false;
   try {
-    const a = Buffer.from(stored.padEnd(setupToken.length, '\0'));
-    const b = Buffer.from(setupToken.padEnd(stored.length, '\0'));
-    match = crypto.timingSafeEqual(a, b) && stored.length === setupToken.length;
+    const a = Buffer.from(licenseKey.padEnd(key.length, '\0'));
+    const b = Buffer.from(key.padEnd(licenseKey.length, '\0'));
+    match = crypto.timingSafeEqual(a, b) && licenseKey.length === key.length;
   } catch {}
+  if (!match) return res.status(401).json({ error: 'Invalid license key' });
 
-  if (!match) {
-    return res.status(401).json({ error: 'Invalid setup token' });
-  }
-
-  // Invalidate token immediately
-  setConfig('setup_token_used', '1');
-
-  // Create a session (30-day expiry)
-  const token = uuidv4();
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').split('.')[0];
-  db.prepare('INSERT INTO sessions (token, expires_at) VALUES (?, ?)').run(token, expiresAt);
-
-  res.json({ token });
+  const ssoToken = uuidv4();
+  // Store as a short-lived pending token (5 min), not yet a full session
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString().replace('T', ' ').split('.')[0];
+  db.prepare('INSERT INTO sessions (token, expires_at) VALUES (?, ?)').run(`sso:${ssoToken}`, expiresAt);
+  res.json({ token: ssoToken });
 });
 
-// GET /api/auth/setup-token — returns the raw setup token (once) for services.buy-it.gr to retrieve
-// This is called by services.buy-it.gr via a signed request containing the LICENSE_KEY
-router.get('/setup-token', (req, res) => {
-  const licenseKey = req.query.licenseKey;
-  if (!licenseKey || licenseKey !== process.env.LICENSE_KEY) {
-    return res.status(401).json({ error: 'Invalid license key' });
+// POST /api/auth/setup — exchange SSO token for a full session
+// Called by the /setup page in the browser
+router.post('/setup', (req, res) => {
+  const { token } = req.body;
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ error: 'token required' });
   }
-  const token = getConfig('setup_token');
-  const used = getConfig('setup_token_used');
-  res.json({ setupToken: token, used: used === '1' });
+
+  const row = db.prepare(
+    "SELECT * FROM sessions WHERE token = ? AND expires_at > datetime('now')"
+  ).get(`sso:${token}`);
+
+  if (!row) return res.status(401).json({ error: 'Invalid or expired SSO token' });
+
+  // Consume the SSO token immediately (single-use)
+  db.prepare('DELETE FROM sessions WHERE token = ?').run(`sso:${token}`);
+
+  // Create a full 30-day session
+  const sessionToken = uuidv4();
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').split('.')[0];
+  db.prepare('INSERT INTO sessions (token, expires_at) VALUES (?, ?)').run(sessionToken, expiresAt);
+
+  res.json({ token: sessionToken });
 });
 
 // Change password — requires existing session auth

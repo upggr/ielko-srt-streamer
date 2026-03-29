@@ -52,19 +52,22 @@ function startApp() {
     }
   });
 
-  // Setup page — exchanges one-time token for a session, then redirects to UI
+  // SSO callback — exchanges short-lived token for a session, redirects to return path
   app.get('/setup', (req, res) => {
-    const { token } = req.query;
-    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Setup</title><style>body{background:#000;color:#0f0;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-size:13px;letter-spacing:2px;}</style></head><body><div id="msg">AUTHENTICATING...</div><script>
+    const token = req.query.token || '';
+    const returnTo = req.query.return || '/';
+    // Basic sanity: only allow relative paths
+    const safePath = returnTo.startsWith('/') ? returnTo : '/';
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Authenticating...</title><style>body{background:#000;color:#0f0;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-size:13px;letter-spacing:2px;}</style></head><body><div id="msg">AUTHENTICATING...</div><script>
 (async()=>{
   const msg=document.getElementById('msg');
   try{
-    const r=await fetch('/api/auth/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({setupToken:${JSON.stringify(token || '')}})});
+    const r=await fetch('/api/auth/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:${JSON.stringify(token)}})});
     const d=await r.json();
     if(!r.ok){msg.textContent='ERROR: '+(d.error||r.status);msg.style.color='#f44';return;}
-    localStorage.setItem('auth_token',d.token);
-    msg.textContent='ACCESS GRANTED — REDIRECTING...';
-    setTimeout(()=>location.href='/',800);
+    localStorage.setItem('srt_token',d.token);
+    msg.textContent='ACCESS GRANTED';
+    location.href=${JSON.stringify(safePath)};
   }catch(e){msg.textContent='ERROR: '+e.message;msg.style.color='#f44';}
 })();
 </script></body></html>`);
