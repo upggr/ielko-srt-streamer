@@ -875,7 +875,7 @@
     <div class="form-group" id="ep-source-url-group" style="display:none;">
       <div class="field-label">SOURCE URL</div>
       <input type="text" id="ep-source-url" placeholder="rtmp://... or rtsp://... or srt://... or http://..." autocomplete="off">
-      <div style="font-size:9px;color:var(--green-dim);margin-top:4px;letter-spacing:1px;">Any URL mediamtx can pull: rtmp://, rtsp://, srt://, http:// (HLS), udp://</div>
+      <div id="ep-source-url-hint" style="font-size:9px;color:var(--green-dim);margin-top:4px;letter-spacing:1px;">Any URL mediamtx can pull: rtmp://, rtsp://, srt://, http:// (HLS), udp://</div>
     </div>
 
     <div id="created-box">
@@ -1194,7 +1194,9 @@
   async function createEndpoint() {
     const name = document.getElementById('ep-name').value.trim();
     const mode = document.getElementById('ep-mode').value;
-    const protocol = mode === 'push' ? document.getElementById('ep-protocol').value : 'rtmp';
+    // icecast pull keeps protocol=icecast; other pulls use rtmp (mediamtx handles any URL)
+    const selectedProtocol = document.getElementById('ep-protocol').value;
+    const protocol = mode === 'push' || selectedProtocol === 'icecast' ? selectedProtocol : 'rtmp';
     const sourceUrl = mode === 'pull' ? document.getElementById('ep-source-url').value.trim() : undefined;
     if (!name) { notify('NAME REQUIRED', true); return; }
     if (mode === 'pull' && !sourceUrl) { notify('SOURCE URL REQUIRED FOR PULL MODE', true); return; }
@@ -1771,9 +1773,16 @@ sudo systemctl enable caddy`;
 
   function onProtocolChange() {
     const protocol = document.getElementById('ep-protocol').value;
-    // Icecast is push-only — hide the mode selector when icecast is selected
-    document.getElementById('ep-mode').style.display = protocol === 'icecast' ? 'none' : '';
-    document.querySelector('[for="ep-mode"], .field-label').style.display = protocol === 'icecast' ? 'none' : '';
+    const modeGroup = document.getElementById('ep-mode').closest('.form-group') || document.getElementById('ep-mode').parentElement;
+    if (protocol === 'icecast') {
+      // Icecast supports both push (live DJ) and pull (relay from another Icecast)
+      // Show mode selector, update source URL hint for pull
+      modeGroup.style.display = '';
+      document.getElementById('ep-source-url-hint').textContent = 'URL of the Icecast/Shoutcast source to relay, e.g. http://radio.example.com:8000/stream';
+    } else {
+      modeGroup.style.display = '';
+      document.getElementById('ep-source-url-hint').textContent = 'Any URL mediamtx can pull: rtmp://, rtsp://, srt://, http:// (HLS), udp://';
+    }
   }
 
   // --- PULL SOURCE ---

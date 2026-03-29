@@ -7,6 +7,7 @@ const { addPath, removePath, getPathStatus } = require('../services/mediamtxClie
 const { getLogs, startYouTube, stopYouTube, startFacebook, stopFacebook, startInstagram, stopInstagram, startTranscode, stopTranscode } = require('../services/ffmpegManager');
 const { getState: getLicenseState } = require('../services/licenseGuard');
 const { withPlanLimits } = require('../services/mediamtxPathConfig');
+const { rewriteMountsConfig } = require('../services/icecastManager');
 
 const router = Router();
 const SERVER_IP = process.env.SERVER_IP || '127.0.0.1';
@@ -15,22 +16,17 @@ const SRT_PORT = 8890;
 const RTMP_PORT = 1935;
 const ICECAST_PORT = 8000;
 
-function getIcecastSourcePassword() {
-  return process.env.ICECAST_SOURCE_PASSWORD || null;
-}
-
-function buildUrls(protocol, name, srtPassword, transcodeEnabled, rtmpPassword) {
+function buildUrls(protocol, name, srtPassword, transcodeEnabled, rtmpPassword, icecastSourcePassword) {
   if (protocol === 'icecast') {
-    const pass = getIcecastSourcePassword();
+    const pass = icecastSourcePassword || null;
     const sourceUrl = pass
       ? `icecast://source:${pass}@${SERVER_IP}:${ICECAST_PORT}/${name}`
       : `icecast://source:<password>@${SERVER_IP}:${ICECAST_PORT}/${name}`;
     const listenUrl = `http://${SERVER_IP}:${ICECAST_PORT}/${name}`;
-    const publicListenUrl = PUBLIC_URL ? `${PUBLIC_URL.replace(/^https/, 'http').replace(/^http/, 'http')}:${ICECAST_PORT}/${name}` : listenUrl;
     return {
       senderUrl: sourceUrl,
-      viewerUrl: publicListenUrl,
-      icecastListenUrl: publicListenUrl,
+      viewerUrl: listenUrl,
+      icecastListenUrl: listenUrl,
       hlsUrl: null, hlsSourceUrl: null, hls720pUrl: null, hls480pUrl: null, hls360pUrl: null,
       webrtcUrl: null, m3uUrl: null, srtPullUrl: null, udpUrl: null, rtmpUrl: null, embedUrl: null,
     };
@@ -69,7 +65,7 @@ function buildUrls(protocol, name, srtPassword, transcodeEnabled, rtmpPassword) 
 
 router.get('/', (req, res) => {
   const rows = db.prepare('SELECT * FROM endpoints ORDER BY created_at DESC').all();
-  res.json(rows.map(r => ({ ...r, ...buildUrls(r.protocol, r.name, r.srt_password, r.transcode_enabled, r.rtmp_password) })));
+  res.json(rows.map(r => ({ ...r, ...buildUrls(r.protocol, r.name, r.srt_password, r.transcode_enabled, r.rtmp_password, r.icecast_source_password) })));
 });
 
 router.post('/', async (req, res) => {
@@ -99,9 +95,14 @@ router.post('/', async (req, res) => {
   const id = uuidv4();
   const srtPassword = protocol === 'srt' && mode === 'push' ? crypto.randomBytes(8).toString('hex') : null;
   const rtmpPassword = protocol === 'rtmp' && mode === 'push' ? crypto.randomBytes(8).toString('hex') : null;
+  const icecastSourcePassword = protocol === 'icecast' ? crypto.randomBytes(10).toString('hex') : null;
 
-  // Icecast endpoints are handled by the icecast container — no mediamtx path needed
-  if (protocol !== 'icecast') {
+  if (protocol === 'icecast') {
+    // Icecast push: register mount in icecast config
+    // Icecast pull (relay): store relay URL — icecast config will include a relay block
+    db.prepare('INSERT INTO endpoints (id, name, protocol, port, icecast_source_password, status, source_mode, source_url) VALUES (?, ?, ?, 0, ?, \'stopped\', ?, ?)').run(id, slugName, protocol, icecastSourcePassword, mode, sourceUrl || null);
+    rewriteMountsConfig();
+  } else {
     try {
       const pathConf = mode === 'pull' ? { source: sourceUrl } : {};
       const auth = { protocol, mode, srtPassword, rtmpPassword };
@@ -109,11 +110,11 @@ router.post('/', async (req, res) => {
     } catch (e) {
       console.error('mediamtx addPath error:', e.message);
     }
+    db.prepare('INSERT INTO endpoints (id, name, protocol, port, srt_password, rtmp_password, status, source_mode, source_url) VALUES (?, ?, ?, 0, ?, ?, \'stopped\', ?, ?)').run(id, slugName, protocol, srtPassword, rtmpPassword, mode, sourceUrl || null);
   }
 
-  db.prepare('INSERT INTO endpoints (id, name, protocol, port, srt_password, rtmp_password, status, source_mode, source_url) VALUES (?, ?, ?, 0, ?, ?, \'stopped\', ?, ?)').run(id, slugName, protocol, srtPassword, rtmpPassword, mode, sourceUrl || null);
   const ep = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(id);
-  res.status(201).json({ ...ep, ...buildUrls(protocol, slugName, srtPassword, ep.transcode_enabled, rtmpPassword) });
+  res.status(201).json({ ...ep, ...buildUrls(protocol, slugName, srtPassword, ep.transcode_enabled, rtmpPassword, icecastSourcePassword) });
 });
 
 router.post('/:id/start', async (req, res) => {
@@ -148,9 +149,12 @@ router.post('/:id/stop', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   const ep = db.prepare('SELECT * FROM endpoints WHERE id = ?').get(req.params.id);
   if (!ep) { res.status(404).json({ error: 'Not found' }); return; }
-  try { await removePath(ep.name); } catch {}
-  stopYouTube(ep.id);
+  if (ep.protocol !== 'icecast') {
+    try { await removePath(ep.name); } catch {}
+    stopYouTube(ep.id);
+  }
   db.prepare('DELETE FROM endpoints WHERE id = ?').run(ep.id);
+  if (ep.protocol === 'icecast') rewriteMountsConfig();
   res.json({ ok: true });
 });
 
@@ -258,10 +262,10 @@ router.post('/:id/pull/disable', async (req, res) => {
   res.json({ ok: true });
 });
 
-// Icecast server credentials — read by the UI so it can show connection details
+// Icecast server info — admin password for web UI access
 router.get('/icecast/config', (req, res) => {
   res.json({
-    sourcePassword: getIcecastSourcePassword(),
+    adminPassword: process.env.ICECAST_ADMIN_PASSWORD || null,
     port: ICECAST_PORT,
     serverIp: SERVER_IP,
   });

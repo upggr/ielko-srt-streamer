@@ -15,6 +15,7 @@ function startApp() {
   const { requireAuth } = require('./middleware/auth');
   const { addPath, listPaths } = require('./services/mediamtxClient');
   const { withPlanLimits } = require('./services/mediamtxPathConfig');
+  const { rewriteMountsConfig } = require('./services/icecastManager');
   const { startLicenseWatchdog, getState: getLicenseState, requireLicense, checkLicense } = require('./services/licenseGuard');
   const { getConfig, setConfig } = require('./bootstrap');
 
@@ -277,6 +278,7 @@ async function tryWebRTC(){
     console.log(`PUBLIC_URL: ${process.env.PUBLIC_URL}`);
     console.log(`SERVER_IP:  ${process.env.SERVER_IP}`);
     setTimeout(syncPaths, 3000);
+    setTimeout(rewriteMountsConfig, 3000); // restore icecast mounts after restart
     setInterval(watchdogTick, 10000);
     startLicenseWatchdog();
   });

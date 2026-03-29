@@ -25,12 +25,12 @@ services:
       - MEDIAMTX_HLS=http://mediamtx:8888
       - LICENSE_KEY=${LICENSE_KEY}
       - LICENSE_VALIDATE_URL=${LICENSE_VALIDATE_URL:-https://services.buy-it.gr/api/license/validate}
-      - ICECAST_SOURCE_PASSWORD=${ICECAST_SOURCE_PASSWORD:-}
       - ICECAST_ADMIN_PASSWORD=${ICECAST_ADMIN_PASSWORD:-}
     volumes:
       - db_data:/data
       - hls_data:/hls
       - .:/repo                          # repo root for self-update (writes update.flag)
+      - icecast_config:/icecast-config   # writes per-mount icecast config
     depends_on:
       - mediamtx
       - hls-nginx
@@ -54,13 +54,13 @@ services:
     ports:
       - "8000:8000"       # Icecast source + listener port
     environment:
-      - ICECAST_SOURCE_PASSWORD=${ICECAST_SOURCE_PASSWORD:-}
       - ICECAST_ADMIN_PASSWORD=${ICECAST_ADMIN_PASSWORD:-}
       - ICECAST_RELAY_PASSWORD=${ICECAST_RELAY_PASSWORD:-}
       - ICECAST_HOSTNAME=${PUBLIC_HOST:-localhost}
       - ICECAST_ADMIN_EMAIL=${LETSENCRYPT_EMAIL:-icemaster@localhost}
     volumes:
       - icecast_log:/var/log/icecast2
+      - icecast_config:/etc/icecast2/mounts  # API writes per-mount config here
     restart: unless-stopped
 
   mediamtx:
@@ -80,3 +80,4 @@ volumes:
   db_data:
   hls_data:
   icecast_log:
+  icecast_config:
