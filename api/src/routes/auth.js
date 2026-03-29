@@ -41,8 +41,9 @@ router.post('/logout', (req, res) => {
 // Returns a token valid for 5 minutes, single-use
 router.post('/token', (req, res) => {
   const authHeader = req.headers['authorization'] || '';
-  const key = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
-  const licenseKey = process.env.LICENSE_KEY || '';
+  const rawBearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  const key = String(rawBearer).trim();
+  const licenseKey = String(process.env.LICENSE_KEY || '').trim();
   if (!key || !licenseKey) return res.status(401).json({ error: 'Unauthorized' });
   let match = false;
   try {
