@@ -52,6 +52,24 @@ function startApp() {
     }
   });
 
+  // Setup page — exchanges one-time token for a session, then redirects to UI
+  app.get('/setup', (req, res) => {
+    const { token } = req.query;
+    res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Setup</title><style>body{background:#000;color:#0f0;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-size:13px;letter-spacing:2px;}</style></head><body><div id="msg">AUTHENTICATING...</div><script>
+(async()=>{
+  const msg=document.getElementById('msg');
+  try{
+    const r=await fetch('/api/auth/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({setupToken:${JSON.stringify(token || '')}})});
+    const d=await r.json();
+    if(!r.ok){msg.textContent='ERROR: '+(d.error||r.status);msg.style.color='#f44';return;}
+    localStorage.setItem('auth_token',d.token);
+    msg.textContent='ACCESS GRANTED — REDIRECTING...';
+    setTimeout(()=>location.href='/',800);
+  }catch(e){msg.textContent='ERROR: '+e.message;msg.style.color='#f44';}
+})();
+</script></body></html>`);
+  });
+
   // Server config (domain, public URL) — readable/writable from UI
   app.get('/api/config', requireAuth, (req, res) => {
     res.json({

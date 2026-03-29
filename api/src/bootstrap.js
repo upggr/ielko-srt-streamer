@@ -102,6 +102,16 @@ async function bootstrap() {
     process.env.PUBLIC_URL = url;
   }
 
+  // --- SETUP_TOKEN (one-time auto-login token for first boot) ---
+  let setupToken = getConfig('setup_token');
+  if (!setupToken) {
+    setupToken = randomSecret(32);
+    setConfig('setup_token', setupToken);
+    setConfig('setup_token_used', '0');
+    console.log(`[bootstrap] Setup token generated. Use via services.buy-it.gr dashboard.`);
+    changed = true;
+  }
+
   if (changed) {
     console.log('[bootstrap] Configuration initialized. Access the UI to complete setup.');
   }
