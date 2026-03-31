@@ -245,8 +245,10 @@ async function tryWebRTC(){
   // Icecast mount proxy — /<mountname> → icecast:8000/<mountname>
   // Checks DB so only real mounts are proxied; everything else falls to SPA
   const icecastProxy = createProxyMiddleware({ target: 'http://icecast:8000', changeOrigin: true });
-  app.use(/^\/([a-z][a-z0-9_-]*)$/, (req, res, next) => {
-    const name = req.path.slice(1);
+  app.use((req, res, next) => {
+    const m = req.path.match(/^\/([a-z][a-z0-9_-]*)$/);
+    if (!m) return next();
+    const name = m[1];
     const exists = db.prepare('SELECT id FROM endpoints WHERE name = ?').get(name);
     if (exists) return icecastProxy(req, res, next);
     next();
