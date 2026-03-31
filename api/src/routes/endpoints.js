@@ -11,7 +11,8 @@ const { rewriteMountsConfig } = require('../services/icecastManager');
 
 const router = Router();
 const SERVER_IP = process.env.SERVER_IP || '127.0.0.1';
-const PUBLIC_URL = process.env.PUBLIC_URL || '';
+const PUBLIC_HOST = process.env.PUBLIC_HOST || '';
+const PUBLIC_URL = process.env.PUBLIC_URL || (PUBLIC_HOST ? `https://${PUBLIC_HOST}` : '');
 const SRT_PORT = 8890;
 const RTMP_PORT = 1935;
 const ICECAST_PORT = 8000;
@@ -22,7 +23,9 @@ function buildUrls(protocol, name, srtPassword, transcodeEnabled, rtmpPassword, 
     const sourceUrl = pass
       ? `icecast://source:${pass}@${SERVER_IP}:${ICECAST_PORT}/${name}`
       : `icecast://source:<password>@${SERVER_IP}:${ICECAST_PORT}/${name}`;
-    const listenUrl = `http://${SERVER_IP}:${ICECAST_PORT}/${name}`;
+    const listenUrl = PUBLIC_URL
+      ? `${PUBLIC_URL.replace(/\/$/, '')}/${name}`
+      : `http://${SERVER_IP}:${ICECAST_PORT}/${name}`;
     return {
       senderUrl: sourceUrl,
       viewerUrl: listenUrl,
@@ -159,8 +162,36 @@ router.delete('/:id', async (req, res) => {
 });
 
 router.get('/:id/stream-stats', async (req, res) => {
-  const ep = db.prepare('SELECT name FROM endpoints WHERE id = ?').get(req.params.id);
+  const ep = db.prepare('SELECT name, protocol FROM endpoints WHERE id = ?').get(req.params.id);
   if (!ep) { res.status(404).json({ error: 'Not found' }); return; }
+
+  // Icecast endpoints: check Icecast status API directly
+  if (ep.protocol === 'icecast') {
+    try {
+      const ICECAST_API = process.env.ICECAST_API || `http://icecast:${ICECAST_PORT}`;
+      const r = await fetch(`${ICECAST_API}/status-json.xsl`);
+      if (!r.ok) { res.json({ live: false }); return; }
+      const data = await r.json();
+      const sources = data?.icestats?.source;
+      const sourceList = Array.isArray(sources) ? sources : (sources ? [sources] : []);
+      const mount = `/${ep.name}`;
+      const source = sourceList.find(s => s.listenurl && s.listenurl.endsWith(mount));
+      const live = !!source;
+      // Icecast doesn't expose cumulative bytes; use a monotonically increasing
+      // estimate based on bitrate × elapsed time so the UI can compute kbps.
+      let bytesReceived = 0;
+      if (live && source.stream_start_iso8601) {
+        const elapsed = (Date.now() - new Date(source.stream_start_iso8601).getTime()) / 1000;
+        const bitrateKbps = 128; // matches ffmpeg encoding bitrate
+        bytesReceived = Math.round((bitrateKbps * 1000 / 8) * elapsed);
+      }
+      res.json({ live, bytesReceived, listeners: source?.listeners || 0, tracks: [], name: ep.name });
+    } catch (e) {
+      res.json({ live: false, error: e.message });
+    }
+    return;
+  }
+
   try {
     const result = await getPathStatus(ep.name);
     if (result.status !== 200 || !result.body) { res.json({ live: false }); return; }
@@ -172,6 +203,61 @@ router.get('/:id/stream-stats', async (req, res) => {
     res.json({ live: ready, bytesReceived, tracks, name: ep.name });
   } catch (e) {
     res.json({ live: false, error: e.message });
+  }
+});
+
+// GET /api/endpoints/:id/monitor-stats — rich stats for quality monitoring
+// Returns path-level bytes + SRT publisher connection stats (RTT, packet loss, retransmissions)
+router.get('/:id/monitor-stats', async (req, res) => {
+  const ep = db.prepare('SELECT name, protocol FROM endpoints WHERE id = ?').get(req.params.id);
+  if (!ep) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const MEDIAMTX_API = process.env.MEDIAMTX_API || 'http://mediamtx:9997';
+
+  function apiGet(url) {
+    const http = require('http');
+    return new Promise((resolve) => {
+      http.get(url, (r) => {
+        let d = '';
+        r.on('data', c => { d += c; });
+        r.on('end', () => { try { resolve(JSON.parse(d)); } catch { resolve(null); } });
+      }).on('error', () => resolve(null));
+    });
+  }
+
+  try {
+    const pathResult = await getPathStatus(ep.name);
+    if (pathResult.status !== 200 || !pathResult.body) {
+      res.json({ live: false, ts: Date.now() }); return;
+    }
+    const path = pathResult.body;
+    const live = path.ready === true;
+    const bytesReceived = path.bytesReceived || 0;
+    const bytesSent = path.bytesSent || 0;
+    const tracks = (path.tracks || []).map(t => ({ type: t.type, codec: t.codec }));
+
+    let srt = null;
+    if (ep.protocol === 'srt') {
+      // Find the SRT publisher connection for this path
+      const conns = await apiGet(`${MEDIAMTX_API}/v3/srtconns/list`);
+      const pub = (conns?.items || []).find(c =>
+        c.path === ep.name && (c.state === 'publish' || c.state === 'write')
+      );
+      if (pub) {
+        srt = {
+          rttMs:        pub.msRTT          ?? pub.rttMs          ?? null,
+          pktLost:      pub.pktRecvLoss    ?? pub.pktLostTotal   ?? pub.pktLost    ?? null,
+          pktRetrans:   pub.pktRetrans     ?? pub.pktRetransTotal ?? null,
+          pktRecv:      pub.pktRecv        ?? pub.pktReceived    ?? null,
+          pktSent:      pub.pktSent        ?? null,
+          mbpsRecv:     pub.mbpsRecvRate   ?? pub.mbpsRecv       ?? null,
+        };
+      }
+    }
+
+    res.json({ live, bytesReceived, bytesSent, tracks, srt, ts: Date.now() });
+  } catch (e) {
+    res.json({ live: false, error: e.message, ts: Date.now() });
   }
 });
 
