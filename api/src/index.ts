@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { createProxyMiddleware } from 'http-proxy-middleware';
-import './db'; // init DB
+import db from './db'; // init DB
 import { recoverState } from './services/ffmpegManager';
 import authRouter from './routes/auth';
 import endpointsRouter from './routes/endpoints';
@@ -110,6 +110,19 @@ app.get('/embed/:name', (req, res) => {
   </script>
 </body>
 </html>`);
+});
+
+// Icecast mount proxy — /<mountname> → icecast:8000/<mountname>
+// Only proxies if the name exists as an endpoint in the DB
+const icecastProxy = createProxyMiddleware({
+  target: 'http://icecast:8000',
+  changeOrigin: true,
+});
+app.use(/^\/([a-z][a-z0-9_-]*)$/, (req, res, next) => {
+  const name = req.path.replace(/^\//, '');
+  const exists = db.prepare('SELECT id FROM endpoints WHERE name = ?').get(name);
+  if (exists) return icecastProxy(req, res, next);
+  next();
 });
 
 // SPA fallback

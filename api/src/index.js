@@ -94,9 +94,11 @@ function startApp() {
   app.get('/api/version', requireAuth, (req, res) => res.json(getLicenseState()));
 
   // Self-update: writes a flag file to /repo; host cron picks it up and runs docker compose up --build
+  // ?force=1 skips the updateAvailable check (force re-pull even if version looks current)
   app.post('/api/update', requireAuth, (req, res) => {
+    const force = req.query.force === '1';
     const state = getLicenseState();
-    if (!state.updateAvailable) {
+    if (!force && !state.updateAvailable) {
       return res.status(400).json({ error: 'No update available' });
     }
     try {
@@ -238,6 +240,16 @@ async function tryWebRTC(){
     const name = req.params.name;
     const hlsUrl = `${PUBLIC_URL}/hls/${name}/index.m3u8`;
     res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#000}video{width:100%;height:100vh;display:block}</style><script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script></head><body><video id="v" controls autoplay muted playsinline></video><script>const v=document.getElementById('v');if(Hls.isSupported()){const h=new Hls({liveSyncDurationCount:3});h.loadSource('${hlsUrl}');h.attachMedia(v);h.on(Hls.Events.MANIFEST_PARSED,()=>v.play())}else if(v.canPlayType('application/vnd.apple.mpegurl')){v.src='${hlsUrl}';v.play()}</script></body></html>`);
+  });
+
+  // Icecast mount proxy — /<mountname> → icecast:8000/<mountname>
+  // Checks DB so only real mounts are proxied; everything else falls to SPA
+  const icecastProxy = createProxyMiddleware({ target: 'http://icecast:8000', changeOrigin: true });
+  app.use(/^\/([a-z][a-z0-9_-]*)$/, (req, res, next) => {
+    const name = req.path.slice(1);
+    const exists = db.prepare('SELECT id FROM endpoints WHERE name = ?').get(name);
+    if (exists) return icecastProxy(req, res, next);
+    next();
   });
 
   app.get('*', (req, res) => res.sendFile(path.join(__dirname, '..', 'ui', 'index.html')));
